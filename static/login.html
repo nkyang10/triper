@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旅程計劃 · 登入</title>
+<style>
+  :root{--paper:#f7f4ef;--ink:#2b2622;--green:#3e5c4b;--terra:#c05f3c;--line:#ddd5c7}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Noto Serif TC","Noto Sans TC",system-ui,-apple-system,sans-serif;
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{width:100%;max-width:400px;background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:28px 24px;box-shadow:0 8px 28px rgba(60,45,30,.06)}
+  h1{margin:0 0 4px;font-size:22px;letter-spacing:.02em}
+  .sub{color:#8a8272;font-size:13px;margin:0 0 20px}
+  label{display:block;font-size:12.5px;color:#6b6357;margin:12px 0 5px}
+  input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:15px;background:#fdfcf9;font-family:inherit}
+  input:focus{outline:2px solid rgba(62,92,75,.25);border-color:var(--green)}
+  button{width:100%;margin-top:18px;padding:12px;border:0;border-radius:8px;
+    background:var(--green);color:#fff;font-size:15px;cursor:pointer;font-family:inherit}
+  button:hover{background:#33503f}
+  .ghost{background:transparent;color:var(--green);border:1px solid var(--line);margin-top:10px}
+  .err{color:var(--terra);font-size:13px;min-height:18px;margin-top:10px}
+  .hint{font-size:12px;color:#9a9186;margin-top:16px;line-height:1.6}
+  .tabs{display:flex;gap:6px;margin-bottom:6px}
+  .tabs button{margin:0;padding:8px;background:#f1ece2;color:#6b6357;font-size:13px;border-radius:8px}
+  .tabs button.on{background:var(--green);color:#fff}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>旅程計劃</h1>
+  <p class="sub">多用戶 · 多旅程 · 協作打勾</p>
+
+  <div class="tabs">
+    <button id="tabLogin" class="on" type="button">登入</button>
+    <button id="tabReg" type="button">註冊</button>
+  </div>
+
+  <form id="form">
+    <div id="nameRow" hidden>
+      <label>名（顯示用）</label>
+      <input id="name" type="text" autocomplete="name" placeholder="例：MY">
+    </div>
+    <label>Email</label>
+    <input id="email" type="email" autocomplete="username" required placeholder="you@example.com">
+    <label>密碼</label>
+    <input id="password" type="password" autocomplete="current-password" required minlength="6" placeholder="最少 6 位">
+    <div class="err" id="err"></div>
+    <button id="submit" type="submit">登入</button>
+  </form>
+
+  <p class="hint">
+    有分享連結（<code>?t=…</code>）嘅話，登入／註冊後會自動加入該旅程（唯讀）。
+  </p>
+</div>
+
+<script>
+const API = '/api';
+let mode = 'login';
+const $ = id => document.getElementById(id);
+
+$('tabLogin').onclick = () => setMode('login');
+$('tabReg').onclick = () => setMode('register');
+function setMode(m){
+  mode = m;
+  $('tabLogin').classList.toggle('on', m==='login');
+  $('tabReg').classList.toggle('on', m==='register');
+  $('nameRow').hidden = m === 'login';
+  $('submit').textContent = m === 'login' ? '登入' : '註冊並登入';
+  $('password').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('err').textContent = '';
+}
+
+const existing = localStorage.getItem('trip_token');
+if (existing) {
+  fetch(API + '/me', {headers: {'Authorization': 'Bearer ' + existing}})
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(() => go())
+    .catch(() => { localStorage.removeItem('trip_token'); });
+}
+
+function go(){
+  const q = location.search;
+  location.href = '/' + q;
+}
+
+$('form').onsubmit = async (e) => {
+  e.preventDefault();
+  $('err').textContent = '';
+  const body = {email: $('email').value.trim(), password: $('password').value};
+  if (mode === 'register') body.name = $('name').value.trim();
+  try {
+    const r = await fetch(API + (mode === 'login' ? '/login' : '/register'), {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!d.ok) { $('err').textContent = d.error || '登入失敗'; return; }
+    localStorage.setItem('trip_token', d.token);
+    localStorage.setItem('trip_user', JSON.stringify(d.user));
+    go();
+  } catch (err) {
+    $('err').textContent = '連線失敗，請再試';
+  }
+};
+</script>
+</body>
+</html>

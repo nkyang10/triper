@@ -1,0 +1,25 @@
+# runtime data — never commit
+data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+photos/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# local secrets
+.env
+*.local

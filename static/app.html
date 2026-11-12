@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旅程計劃</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Noto Sans TC","Hiragino Sans",sans-serif;background:#f7f4ef;color:#2b2b2b}
+  #app{display:flex;flex-direction:column;height:100vh}
+  header{padding:8px 14px 6px;background:#3e5c4b;color:#fff}
+  header h1{margin:0;font-size:14.5px;font-weight:600}
+  header p{margin:2px 0 0;font-size:10.5px;opacity:.85}
+  #searchbar{padding:8px 10px;background:#dfe8e0;display:flex;gap:6px;align-items:center;border-bottom:2px solid #3e5c4b}
+  #q{flex:1;padding:10px 12px;font-size:14px;border:2px solid #c8bfae;border-radius:8px;outline:none;background:#fff;color:#2b2b2b}
+  #q:focus{border-color:#c05f3c;box-shadow:0 0 0 3px rgba(192,95,60,.15)}
+  #q::placeholder{color:#a89e8e;font-size:12px}
+  #clear{padding:10px 12px;font-size:13px;border:2px solid #c8bfae;background:#fff;border-radius:8px;color:#7a7264;cursor:pointer;font-weight:600}
+  #count{font-size:10.5px;color:#3e5c4b;font-weight:600;padding:0 12px 6px;background:#dfe8e0}
+  #wrap{flex:1;display:flex;min-height:0}
+  #sidebar{width:345px;overflow-y:auto;background:#fffdf9;border-right:1px solid #e3ddd2}
+  #map{flex:1}
+  .daybar{display:flex;gap:5px;padding:8px;background:#efe9df;position:sticky;top:0;z-index:500;flex-wrap:wrap}
+  .daybar button{flex:1 1 30%;font-size:10.5px;padding:6px 3px;border:1px solid #c8bfae;background:#fff;border-radius:6px;cursor:pointer;color:#3e5c4b;font-weight:600}
+  .daybar button.on{background:#3e5c4b;color:#fff;border-color:#3e5c4b}
+  .daybar button.all{flex:1 1 100%}
+  .grp{padding:7px 12px;font-size:11px;font-weight:700;color:#3e5c4b;background:#f3eee5;letter-spacing:.03em}
+  .item{padding:9px 12px;border-bottom:1px solid #f0ebe2;cursor:pointer}
+  .item:hover{background:#f6f1e7}
+  .item .n{display:flex;align-items:baseline;gap:7px}
+  .item .num{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;border-radius:50%;background:#c05f3c;color:#fff;font-size:11px;font-weight:700;flex:none}
+  .item .t{font-size:12.5px;font-weight:600;line-height:1.3}
+  .item .en{font-size:10px;color:#8a8272;margin-top:1px}
+  .item .d{font-size:10.5px;color:#7a7264;margin-top:2px;line-height:1.45}
+  .item .h{font-size:10.5px;color:#3e5c4b;font-weight:600;margin-top:2px}
+  .item .dist{font-size:10px;color:#c05f3c;font-weight:600;margin-top:1px}
+  .item.far{opacity:.75}
+  .legend{padding:10px 12px;font-size:10.5px;color:#7a7264;border-top:2px solid #efe9df;background:#fffdf9;line-height:1.6}
+  .legend b{color:#2b2b2b}
+  .leaflet-popup-content{font-size:12px;line-height:1.55;margin:10px 12px;max-height:340px;overflow:auto}
+  .leaflet-popup-content h3{margin:0 0 2px;font-size:13px;color:#3e5c4b}
+  .leaflet-popup-content .en{font-size:10.5px;color:#8a8272;margin-bottom:4px}
+  .leaflet-popup-content .m{color:#7a7264;font-size:11px}
+  .leaflet-popup-content .hr{color:#3e5c4b;font-weight:600;font-size:11.5px;margin:4px 0}
+  .leaflet-popup-content a{color:#c05f3c}
+  @media(max-width:760px){
+    #wrap{flex-direction:column-reverse}
+    #sidebar{width:100%;height:42vh;border-right:none;border-top:1px solid #e3ddd2}
+    #map{height:58vh}
+  }
+
+  .pinwrap{background:none;border:none;overflow:visible}
+  .pinball{width:36px;height:36px;border-radius:50%;color:#fff;
+    font:700 13px/30px -apple-system,"Noto Sans TC",sans-serif;text-align:center;
+    border:3px solid #fff;box-shadow:0 2px 7px rgba(0,0,0,.45);box-sizing:border-box;
+    display:flex;align-items:center;justify-content:center;cursor:pointer}
+
+  html,body{overscroll-behavior:none;overscroll-behavior-x:none;overscroll-behavior-y:none;touch-action:pan-y}
+  #map,#app{overscroll-behavior:none}
+  .leaflet-container{overscroll-behavior:none;touch-action:none}
+  .leaflet-grab{cursor:grab}
+
+  .daybar{display:block;padding:7px 8px}
+  .cbrow{display:flex;gap:5px;margin-bottom:5px}
+  .cbrow:last-child{margin-bottom:0}
+  .cb{flex:1 1 0;display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;
+      color:#3e5c4b;background:#fff;border:1px solid #c8bfae;border-radius:6px;padding:5px 6px;
+      cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden}
+  .cb:has(input:checked){background:#eef4ef;border-color:#3e5c4b}
+  .cb input{width:13px;height:13px;accent-color:#3e5c4b;margin:0;flex:none;cursor:pointer}
+  .cb .sw{width:9px;height:9px;border-radius:50%;flex:none}
+  .cb b{font-weight:700}
+
+  .filterbar{position:sticky;top:0;z-index:600;padding:7px 8px;background:#efe9df;border-bottom:1px solid #e0d8c9}
+  #fbtn{width:100%;display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;
+        color:#3e5c4b;background:#fff;border:1.5px solid #3e5c4b;border-radius:8px;
+        padding:8px 10px;cursor:pointer}
+  #fbtn .fdot{width:10px;height:10px;border-radius:50%;background:#c05f3c;flex:none}
+  #fbtn #fcount{margin-left:auto;font-size:10.5px;font-weight:700;color:#7a7264;
+        background:#f1ece2;border-radius:20px;padding:2px 8px}
+  #fbtn .car{font-size:10px;color:#7a7264;transition:transform .18s}
+  #fbtn[aria-expanded="true"] .car{transform:rotate(180deg)}
+  .fpop{position:absolute;left:8px;right:8px;top:calc(100% + 4px);background:#fff;
+        border:1px solid #c8bfae;border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.18);
+        padding:8px;max-height:68vh;overflow-y:auto;animation:popin .14s ease-out}
+  @keyframes popin{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+  .fphead{display:flex;align-items:center;justify-content:space-between;font-size:11px;
+        font-weight:700;color:#3e5c4b;padding:2px 4px 7px;border-bottom:1px solid #f0ebe2;margin-bottom:5px}
+  #fclose{border:none;background:#f1ece2;color:#7a7264;width:22px;height:22px;border-radius:50%;
+        font-size:12px;cursor:pointer;line-height:1}
+  .fpop .cb{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;
+        color:#3b3b3b;background:#fff;border:none;border-radius:6px;padding:9px 6px;
+        cursor:pointer;user-select:none;white-space:normal;line-height:1.3}
+  .fpop .cb:hover{background:#f7f3ea}
+  .fpop .cb input{width:16px;height:16px;accent-color:#3e5c4b;margin:0;flex:none;cursor:pointer}
+  .fpop .cb .sw{width:10px;height:10px;border-radius:50%;flex:none}
+  .fpop .cb .cnt{margin-left:auto;font-size:10px;font-weight:700;color:#8a8272;
+        background:#f1ece2;border-radius:20px;padding:1px 7px;flex:none}
+  .fpfoot{display:flex;gap:6px;align-items:center;margin-top:6px;padding-top:7px;border-top:1px solid #f0ebe2}
+  .fpfoot .allcb{flex:1;padding:7px 4px}
+  #fapply{flex:none;font-size:11.5px;font-weight:700;color:#fff;background:#3e5c4b;
+        border:none;border-radius:7px;padding:9px 16px;cursor:pointer}
+  #fapply:active{background:#2f4a3c}
+  .fback{position:fixed;inset:0;background:rgba(20,20,20,.28);z-index:550}
+
+  /* ===== view tabs ===== */
+  .viewtabs{display:flex;gap:6px;padding:7px 10px;background:#3e5c4b;position:relative;z-index:70}
+  .viewtabs .vt{flex:1;border:none;border-radius:8px;padding:9px 4px;font-size:12.5px;font-weight:700;
+        background:rgba(255,255,255,.16);color:#dfe8e0;cursor:pointer}
+  .viewtabs .vt.on{background:#fffdf9;color:#3e5c4b}
+  .view{display:none}
+  .view.on{display:flex;flex-direction:column;flex:1;min-height:0}
+
+  /* ===== itinerary (scoped to #view-plan) ===== */
+  #view-plan{overflow-y:auto;display:none;background:#f7f4ef;padding-bottom:76px}
+  #view-plan.on{display:block}
+  #view-plan .ithead{display:none}
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{overscroll-behavior:none;margin:0}
+  body.x{font-family:-apple-system,"Noto Sans TC","Hiragino Sans",sans-serif;
+       background:#f7f4ef;color:#2b2b2b;padding-bottom:76px}
+  header{background:#3e5c4b;color:#fff;padding:11px 15px 9px;position:sticky;top:0;z-index:60}
+  header h1{margin:0;font-size:15px;font-weight:700;letter-spacing:.01em}
+  header p{margin:3px 0 0;font-size:10.5px;opacity:.85;line-height:1.4}
+
+  /* ---- day tabs ---- */
+  .tabs{display:flex;gap:5px;padding:8px 10px;background:#efe9df;
+        position:sticky;top:56px;z-index:55;border-bottom:1px solid #e0d8c9}
+  .tabs button{flex:1;border:1.5px solid #c8bfae;background:#fff;border-radius:8px;
+        padding:8px 4px;font-size:11.5px;font-weight:700;color:#3e5c4b;cursor:pointer;line-height:1.25}
+  .tabs button small{display:block;font-size:9.5px;font-weight:600;color:#8a8272;margin-top:1px}
+  .tabs button.on{background:#3e5c4b;color:#fff;border-color:#3e5c4b}
+  .tabs button.on small{color:#cfe0d5}
+
+  /* ---- progress ---- */
+  .prog{padding:9px 15px 3px;display:flex;align-items:center;gap:9px}
+  .bar{flex:1;height:7px;background:#e5ded1;border-radius:20px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#c05f3c,#3e5c4b);
+        border-radius:20px;transition:width .3s ease}
+  .prog span{font-size:11px;font-weight:700;color:#3e5c4b;white-space:nowrap}
+
+  /* ---- day meta ---- */
+  .meta{margin:8px 12px 4px;padding:9px 12px;background:#fffdf9;border-left:3px solid #c05f3c;
+        border-radius:0 8px 8px 0;font-size:11px;color:#6b6355;line-height:1.65}
+  .meta b{color:#3e5c4b}
+
+  /* ---- item list ---- */
+  .day{display:none;padding-bottom:12px}
+  .day.on{display:block}
+  .item{display:flex;gap:10px;padding:11px 13px;margin:0 12px 7px;background:#fff;
+        border:1px solid #e8e1d4;border-radius:9px;transition:.16s;align-items:flex-start}
+  .item.done{background:#f0f5f1;border-color:#b9cdbf}
+  .item.done .body{opacity:.5}
+  .item.done .body .tt{text-decoration:line-through}
+  .item.warn{border-left:3px solid #c0392b}
+  .item.star{border-left:3px solid #d4a017}
+
+  .chk{flex:none;width:26px;height:26px;border:2px solid #c0b7a6;border-radius:7px;
+       background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
+       margin-top:1px;transition:.15s}
+  .chk:active{transform:scale(.9)}
+  .chk svg{width:15px;height:15px;opacity:0;stroke:#fff;stroke-width:3.4;fill:none;
+           stroke-linecap:round;stroke-linejoin:round;transition:.15s}
+  .item.done .chk{background:#3e5c4b;border-color:#3e5c4b}
+  .item.done .chk svg{opacity:1}
+
+  .body{flex:1;min-width:0}
+  .tm{font-size:10.5px;font-weight:800;color:#c05f3c;letter-spacing:.02em;margin-bottom:2px}
+  .tt{font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px}
+  .sub{font-size:10.8px;color:#7a7264;line-height:1.55}
+  .sub em{font-style:normal;color:#3e5c4b;font-weight:600}
+  .tag{display:inline-block;font-size:9.5px;font-weight:700;padding:1.5px 6px;border-radius:4px;
+       margin:3px 4px 0 0;background:#f1ece2;color:#7a7264}
+  .tag.w{background:#fbe4e0;color:#a93226}
+  .tag.g{background:#e6efe8;color:#3e5c4b}
+
+  .sec{margin:13px 12px 5px;font-size:10.5px;font-weight:800;color:#8a8272;
+       letter-spacing:.06em;text-transform:uppercase}
+
+  /* ---- footer bar ---- */
+  .foot{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;gap:7px;
+        padding:9px 12px calc(9px + env(safe-area-inset-bottom));
+        background:#fffdf9;border-top:1px solid #e5ded1}
+  .foot button{flex:1;border-radius:8px;font-size:11.5px;font-weight:700;padding:11px 6px;cursor:pointer;
+        border:1.5px solid #c8bfae;background:#fff;color:#3e5c4b}
+  .foot button.primary{background:#3e5c4b;color:#fff;border-color:#3e5c4b}
+  .foot button:active{opacity:.75}
+  .saved{position:fixed;left:50%;transform:translateX(-50%) translateY(14px);bottom:70px;
+        background:rgba(45,45,45,.92);color:#fff;font-size:11.5px;font-weight:600;
+        padding:8px 15px;border-radius:20px;opacity:0;transition:.22s;pointer-events:none;z-index:80}
+  .saved.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  #view-plan .day{display:none;padding-bottom:12px}
+  #view-plan .day.on{display:block}
+  #view-plan .item{display:flex;gap:10px;padding:11px 13px;margin:0 12px 7px;background:#fff;
+        border:1px solid #e8e1d4;border-radius:9px;transition:.16s;align-items:flex-start;cursor:pointer}
+  #view-plan .item.done{background:#f0f5f1;border-color:#b9cdbf}
+  #view-plan .item.done .body{opacity:.5}
+  #view-plan .item.done .body .tt{text-decoration:line-through}
+  #view-plan .item.warn{border-left:3px solid #c0392b}
+  #view-plan .item.star{border-left:3px solid #d4a017}
+  #view-plan .chk{flex:none;width:26px;height:26px;border:2px solid #c0b7a6;border-radius:7px;
+        background:#fff;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:.15s}
+  #view-plan .item.done .chk{background:#3e5c4b;border-color:#3e5c4b}
+  #view-plan .chk svg{width:15px;height:15px;opacity:0;stroke:#fff;stroke-width:3.4;fill:none;
+        stroke-linecap:round;stroke-linejoin:round;transition:.15s}
+  #view-plan .item.done .chk svg{opacity:1}
+  #view-plan .body{flex:1;min-width:0}
+  #view-plan .tm{font-size:10.5px;font-weight:800;color:#c05f3c;letter-spacing:.02em;margin-bottom:2px}
+  #view-plan .tt{font-size:13px;font-weight:700;line-height:1.35;margin-bottom:3px}
+  #view-plan .sub{font-size:10.8px;color:#7a7264;line-height:1.55}
+  #view-plan .sub em{font-style:normal;color:#3e5c4b;font-weight:600}
+  #view-plan .tag{display:inline-block;font-size:9.5px;font-weight:700;padding:1.5px 6px;border-radius:4px;
+        margin:3px 4px 0 0;background:#f1ece2;color:#7a7264}
+  #view-plan .tag.w{background:#fbe4e0;color:#a93226}
+  #view-plan .tag.g{background:#e6efe8;color:#3e5c4b}
+  #view-plan .sec{margin:13px 12px 5px;font-size:10.5px;font-weight:800;color:#8a8272;
+        letter-spacing:.06em;text-transform:uppercase}
+  #view-plan .meta{margin:8px 12px 4px;padding:9px 12px;background:#fffdf9;border-left:3px solid #c05f3c;
+        border-radius:0 8px 8px 0;font-size:11px;color:#6b6355;line-height:1.65}
+  #view-plan .meta b{color:#3e5c4b}
+  #view-plan .tabs{display:flex;gap:5px;padding:8px 10px;background:#efe9df;
+        position:sticky;top:0;z-index:55;border-bottom:1px solid #e0d8c9}
+  #view-plan .tabs button{flex:1;border:1.5px solid #c8bfae;background:#fff;border-radius:8px;
+        padding:8px 4px;font-size:11.5px;font-weight:700;color:#3e5c4b;cursor:pointer;line-height:1.25}
+  #view-plan .tabs button small{display:block;font-size:9.5px;font-weight:600;color:#8a8272;margin-top:1px}
+  #view-plan .tabs button.on{background:#3e5c4b;color:#fff;border-color:#3e5c4b}
+  #view-plan .tabs button.on small{color:#cfe0d5}
+  #view-plan .prog{padding:9px 15px 3px;display:flex;align-items:center;gap:9px}
+  #view-plan .bar{flex:1;height:7px;background:#e5ded1;border-radius:20px;overflow:hidden}
+  #view-plan .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#c05f3c,#3e5c4b);
+        border-radius:20px;transition:width .3s ease}
+  #view-plan .prog span{font-size:11px;font-weight:700;color:#3e5c4b;white-space:nowrap}
+  #view-plan .foot{position:fixed;left:0;right:0;bottom:0;z-index:80;display:flex;gap:7px;
+        padding:9px 12px calc(9px + env(safe-area-inset-bottom));
+        background:#fffdf9;border-top:1px solid #e5ded1}
+  #view-plan .foot button{flex:1;border-radius:8px;font-size:11.5px;font-weight:700;padding:11px 6px;
+        cursor:pointer;border:1.5px solid #c8bfae;background:#fff;color:#3e5c4b}
+  #view-plan .foot button.primary{background:#3e5c4b;color:#fff;border-color:#3e5c4b}
+  .saved{position:fixed;left:50%;transform:translateX(-50%) translateY(14px);bottom:70px;
+        background:rgba(45,45,45,.92);color:#fff;font-size:11.5px;font-weight:600;
+        padding:8px 15px;border-radius:20px;opacity:0;transition:.22s;pointer-events:none;z-index:90}
+  .saved.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media(max-width:760px){
+    #view-plan .foot{bottom:0}
+  }
+
+
+  /* ---- 4-state marks ---- */
+  #view-plan .item.st-done{background:#eef5f0;border-color:#a9c9b6}
+  #view-plan .item.st-partial{background:#fff8e6;border-color:#e6cf94}
+  #view-plan .item.st-skip{background:#f2f2f2;border-color:#cfcbc4}
+  #view-plan .item.st-done .body,#view-plan .item.st-skip .body{opacity:.55}
+  #view-plan .item.st-done .tt{text-decoration:line-through}
+  #view-plan .item.st-skip .tt{text-decoration:line-through;text-decoration-color:#a93226}
+  #view-plan .item .chk{position:relative;font-size:13px;line-height:1;font-weight:800}
+  #view-plan .item .chk svg{display:none}
+  #view-plan .item .chk::after{content:"";font-size:14px;line-height:1}
+  #view-plan .item.st-done .chk{background:#3e5c4b;border-color:#3e5c4b;color:#fff}
+  #view-plan .item.st-done .chk::after{content:"✓"}
+  #view-plan .item.st-partial .chk{background:#d4a017;border-color:#d4a017;color:#fff}
+  #view-plan .item.st-partial .chk::after{content:"◐"}
+  #view-plan .item.st-skip .chk{background:#8a8272;border-color:#8a8272;color:#fff}
+  #view-plan .item.st-skip .chk::after{content:"✕"}
+  #view-plan .item:not(.st-done):not(.st-partial):not(.st-skip) .chk::after{content:""}
+  /* flash on remote update */
+  #view-plan .item.flash{box-shadow:0 0 0 2px #c05f3c inset;transition:box-shadow .2s}
+
+  .syncbar{position:fixed;left:0;right:0;bottom:0;z-index:80;display:flex;align-items:center;gap:8px;
+        padding:7px 13px calc(7px + env(safe-area-inset-bottom));
+        background:#fffdf9;border-top:1px solid #e5ded1;font-size:10.5px;font-weight:600;color:#7a7264}
+  #syncState{display:flex;align-items:center;gap:5px}
+  #syncState::before{content:"";width:7px;height:7px;border-radius:50%;background:#a8a096;flex:none}
+  #syncState.ok::before{background:#3e9c5f}
+  #syncState.err::before{background:#c0392b}
+  #syncState.wait::before{background:#d4a017}
+  #syncWho{margin-left:auto;color:#b3a99a;font-weight:600}
+  .legend-states{display:flex;gap:9px;flex-wrap:wrap;padding:0 14px 10px;font-size:9.8px;color:#8a8272}
+  .legend-states b{display:inline-flex;align-items:center;justify-content:center;
+        width:15px;height:15px;border-radius:4px;color:#fff;font-size:10px;margin-right:3px}
+
+  /* ===== dynamic day list ===== */
+  #daylist{padding-bottom:16px}
+  #view-plan .item .ttRow{display:flex;align-items:flex-start;gap:6px}
+  #view-plan .item .ttRow .tt{flex:1}
+  #view-plan .item .tools{display:flex;gap:3px;flex:none;opacity:.55}
+  #view-plan .item .tools button{border:none;background:#f1ece2;color:#7a7264;border-radius:5px;
+        width:22px;height:22px;font-size:11px;line-height:1;cursor:pointer;padding:0}
+  #view-plan .item .tools button:active{background:#e2d9c8}
+  #view-plan .thumb{margin-top:6px;border-radius:7px;overflow:hidden;max-width:150px}
+  #view-plan .thumb img{width:100%;display:block}
+
+  /* ===== floating add button ===== */
+  #fab{position:fixed;right:16px;bottom:44px;z-index:85;width:54px;height:54px;border-radius:50%;
+        border:none;background:#c05f3c;color:#fff;font-size:29px;line-height:1;font-weight:400;
+        box-shadow:0 5px 16px rgba(0,0,0,.28);cursor:pointer}
+  #fab:active{transform:scale(.94)}
+
+  /* ===== sheet (bottom sheet form) ===== */
+  .sheetback{position:fixed;inset:0;background:rgba(20,20,20,.35);z-index:96}
+  .photoPrev[hidden]{display:none}
+  .sheet[hidden]{display:none}
+  .sheetback[hidden]{display:none}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:97;background:#fffdf9;
+        border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.22);
+        max-height:90vh;display:flex;flex-direction:column;animation:sheetup .18s ease-out}
+  @keyframes sheetup{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+  .sheetHead{display:flex;align-items:center;justify-content:space-between;
+        padding:13px 15px 9px;font-size:13.5px;font-weight:800;color:#3e5c4b;
+        border-bottom:1px solid #efe9df;flex:none}
+  #sheetX{border:none;background:#f1ece2;color:#7a7264;width:28px;height:28px;border-radius:50%;
+        font-size:13px;cursor:pointer;line-height:1}
+  .sheetBody{overflow-y:auto;padding:11px 15px 4px;flex:1}
+  .fld{display:block;margin-bottom:11px}
+  .fld>span{display:block;font-size:10.5px;font-weight:800;color:#8a8272;margin-bottom:4px;letter-spacing:.03em}
+  .fld input,.fld textarea,.fld select{width:100%;font-size:13px;padding:9px 11px;border:1.5px solid #d8d0c1;
+        border-radius:8px;background:#fff;color:#2b2b2b;font-family:inherit;outline:none}
+  .fld input:focus,.fld textarea:focus,.fld select:focus{border-color:#c05f3c;box-shadow:0 0 0 3px rgba(192,95,60,.13)}
+  .fld textarea{resize:vertical;line-height:1.5}
+  .photoPrev{margin:2px 0 10px;border-radius:9px;overflow:hidden;background:#f1ece2}
+  .photoPrev img{width:100%;display:block;max-height:200px;object-fit:cover}
+  .sheetFoot{display:flex;gap:8px;padding:10px 15px calc(11px + env(safe-area-inset-bottom));
+        border-top:1px solid #efe9df;flex:none}
+  .sheetFoot button{flex:1;border-radius:9px;font-size:13px;font-weight:800;padding:12px 8px;cursor:pointer;border:none}
+  .sheetFoot .primary{background:#3e5c4b;color:#fff}
+  .sheetFoot .danger{background:#fbe4e0;color:#a93226;flex:0 0 88px}
+  .sheetFoot button:active{opacity:.78}
+
+  /* ===== analyzing overlay ===== */
+  .analyzing{position:fixed;inset:0;z-index:98;background:rgba(255,253,249,.94);
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+  .analyzing .sp{width:34px;height:34px;border:3px solid #e5ded1;border-top-color:#c05f3c;
+        border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .analyzing p{margin:0;font-size:12.5px;font-weight:700;color:#3e5c4b}
+  .analyzing small{font-size:11px;color:#8a8272}
+  .photoStrip{display:flex;gap:7px;overflow-x:auto;padding:0 12px 12px}
+  .photoStrip img{height:82px;border-radius:8px;display:block}
+
+  /* ===== fab bubbles ===== */
+  #fabWrap{position:fixed;right:16px;bottom:44px;z-index:85;display:flex;flex-direction:column;
+        align-items:flex-end;gap:8px}
+  #fab{width:54px;height:54px;border-radius:50%;border:none;background:#c05f3c;color:#fff;
+        font-size:29px;line-height:1;font-weight:400;box-shadow:0 5px 16px rgba(0,0,0,.28);cursor:pointer;
+        transition:transform .18s}
+  #fab.open{transform:rotate(45deg)}
+  .bub{display:flex;align-items:center;gap:7px;border:none;border-radius:26px;padding:9px 14px 9px 11px;
+        background:#fffdf9;color:#3e5c4b;font-size:12.5px;font-weight:800;cursor:pointer;
+        box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transform:translateY(10px) scale(.94);
+        pointer-events:none;transition:.16s;white-space:nowrap}
+  .bub .ic{font-size:15px;line-height:1}
+  #fabWrap.open .bub{opacity:1;transform:none;pointer-events:auto}
+  #fabWrap.open .bub:nth-child(1){transition-delay:.04s}
+  #fabWrap.open .bub:nth-child(2){transition-delay:.02s}
+  .bub:active{background:#f1ece2}
+
+  /* ===== detail sheet ===== */
+  .sheet.detail{max-height:92vh}
+  #detBody{padding:12px 15px 6px}
+  .detHero{border-radius:10px;overflow:hidden;background:#f1ece2;margin-bottom:11px}
+  .detHero img{width:100%;display:block;max-height:280px;object-fit:cover}
+  .detMeta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+  .detMeta span{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:5px;background:#f1ece2;color:#7a7264}
+  .detMeta span.k{background:#e6efe8;color:#3e5c4b}
+  .detTime{font-size:12px;font-weight:800;color:#c05f3c;margin-bottom:3px}
+  .detTitle{font-size:17px;font-weight:800;line-height:1.32;margin-bottom:8px;color:#2b2b2b}
+  .detSub{font-size:13px;line-height:1.65;color:#5d564a;margin-bottom:12px;white-space:pre-wrap}
+  .detPlace{border:1px solid #e5ded1;border-radius:9px;padding:10px 12px;margin-bottom:11px;background:#fffdf9}
+  .detPlace .pn{font-size:12.5px;font-weight:800;color:#3e5c4b;margin-bottom:3px}
+  .detPlace .pa{font-size:11px;color:#7a7264;line-height:1.5}
+  .detPlace a{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:700;color:#c05f3c;text-decoration:none}
+  .detSec{font-size:10.5px;font-weight:800;color:#8a8272;letter-spacing:.05em;margin:13px 0 7px;text-transform:uppercase}
+  .attList{display:flex;flex-direction:column;gap:8px}
+  .att{display:flex;gap:9px;align-items:center;border:1px solid #e8e1d4;border-radius:9px;
+        padding:7px;background:#fff;cursor:pointer}
+  .att img{width:64px;height:64px;object-fit:cover;border-radius:6px;flex:none;background:#f1ece2}
+  .att .ai{flex:1;min-width:0}
+  .att .an{font-size:11.5px;font-weight:700;color:#2b2b2b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .att .ad{font-size:10px;color:#8a8272;margin-top:2px}
+  .att .x{border:none;background:#f1ece2;color:#a93226;width:24px;height:24px;border-radius:50%;
+        font-size:12px;cursor:pointer;flex:none}
+  .empty{font-size:11.5px;color:#a89e8e;padding:9px 2px}
+  .sheetFoot .attach{background:#f1ece2;color:#3e5c4b;flex:1.1}
+
+  /* ---- multi-user / multi-trip additions ---- */
+  header .hrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  header .hrow>div:first-child{flex:1 1 auto;min-width:0}
+  header h1{font-size:16px;line-height:1.35;margin:0;word-break:break-word}
+  header p{font-size:11.5px;color:#8a8272;margin:3px 0 0}
+  .ubar{display:flex;gap:6px;flex:none;padding-top:2px}
+  .ubar button{background:#f1ece2;border:1px solid #ddd5c7;border-radius:8px;
+    padding:6px 9px;font-size:12.5px;color:#3e5c4b;cursor:pointer;font-family:inherit}
+  .ubar button:hover{background:#e9e2d5}
+  .rolebar{padding:4px 0 0}
+  .rchip{font-size:11px;padding:2px 7px;border-radius:99px;background:#eee8dc;color:#6b6357;white-space:nowrap}
+  .rchip.r-owner{background:#3e5c4b;color:#fff}
+  .rchip.r-editor{background:#c05f3c;color:#fff}
+  .rchip.r-viewer{background:#8a8272;color:#fff}
+  .muted{color:#8a8272;font-size:13px}
+  .trow{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:11px 12px;border:1px solid #ddd5c7;border-radius:9px;margin-bottom:8px;
+    background:#fdfcf9;cursor:pointer}
+  .trow:hover{border-color:#3e5c4b}
+  .trow small{display:block;color:#8a8272;font-size:11.5px;margin-top:2px}
+  .mline{padding:7px 2px;border-bottom:1px dashed #e5ddd0;font-size:13px;display:flex;
+    justify-content:space-between;align-items:center;gap:8px}
+  .invrow{display:flex;gap:6px;flex-wrap:wrap}
+  .invrow input{flex:1 1 140px}
+  .invrow select{flex:0 0 92px;padding:10px;border:1px solid #ddd5c7;border-radius:8px;font-family:inherit}
+  .invrow button{flex:0 0 auto;margin:0;padding:10px 14px;background:#3e5c4b;color:#fff;border:0;border-radius:8px}
+  label.fl{display:block;font-size:12.5px;color:#6b6357;margin:12px 0 5px}
+  .row2{display:flex;gap:8px}
+  .row2>div{flex:1}
+  button.wide{width:100%;margin-top:12px}
+  #shareOut{margin-top:8px;font-size:12px}
+  body.readonly .chk,body.readonly #fabWrap,body.readonly .item .acts,body.readonly #detEdit{display:none!important}
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="hrow">
+      <div>
+        <h1 id="tripTitle">旅程</h1>
+        <p id="tripSub">—</p>
+      </div>
+      <div class="ubar">
+        <button id="tripSwitch" type="button" title="切換旅程">🗂 旅程</button>
+        <button id="userBtn" type="button" title="帳戶">👤</button>
+      </div>
+    </div>
+    <div id="roleBar" class="rolebar" hidden></div>
+  </header>
+  <div class="viewtabs">
+    <button class="vt on" data-view="map">🗺 地圖</button>
+    <button class="vt" data-view="plan">📋 行程</button>
+  </div>
+
+  <!-- ================= MAP VIEW ================= -->
+  <div id="view-map" class="view on">
+  <div id="searchbar">
+    <input id="q" type="search" placeholder="🔍 搜尋：Mandarake / Book Off / 羅針盤 Lashinbang / Step Sports / Hobby Off / Animate" autocomplete="off">
+    <button id="clear">✕</button>
+  </div>
+  <div id="count"></div>
+  <div id="wrap">
+    <div id="sidebar">
+      <div class="filterbar">
+        <button id="fbtn" type="button" aria-expanded="false">
+          <span class="fdot"></span>篩選類型<span id="fcount">8/8</span><span class="car">▾</span>
+        </button>
+        <div id="fpop" class="fpop" hidden>
+          <div class="fphead">顯示邊類地點<button id="fclose" type="button">✕</button></div>
+          <label class="cb"><input type="checkbox" class="tchk" value="trip" checked><span class="sw" style="background:#3e5c4b"></span>行程點<span class="cnt" data-for="trip"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="anime" checked><span class="sw" style="background:#c05f3c"></span>二手／動漫（羅針盤・Animate）<span class="cnt" data-for="anime"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="sport" checked><span class="sw" style="background:#3a5b9c"></span>運動店（Step Sports）<span class="cnt" data-for="sport"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="bookoff" checked><span class="sw" style="background:#c05f3c"></span>Book Off<span class="cnt" data-for="bookoff"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="hardoff" checked><span class="sw" style="background:#2f6b8f"></span>Hard Off<span class="cnt" data-for="hardoff"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="hobbyoff" checked><span class="sw" style="background:#7a3b8f"></span>Hobby Off<span class="cnt" data-for="hobbyoff"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="mandarake" checked><span class="sw" style="background:#8a5a9c"></span>Mandarake<span class="cnt" data-for="mandarake"></span></label>
+          <label class="cb"><input type="checkbox" class="tchk" value="sushi" checked><span class="sw" style="background:#b8860b"></span>壽司郎（布甸狗公仔有貨）<span class="cnt" data-for="sushi"></span></label>
+          <div class="fpfoot">
+            <label class="cb allcb"><input type="checkbox" class="tchk" value="all" id="cbAll" checked><b>全選</b></label>
+            <button id="fapply" type="button">完成</button>
+          </div>
+        </div>
+      </div>
+      <div id="list"></div>
+      <div class="legend">
+        <b>篩選規則</b>：距沿線任何 JR 站 ≤ 2.0km（唔限市中心站）<br>
+        <b>顏色</b>：<span style="color:#c05f3c">●</span> 二手／動漫店　<span style="color:#3a5b9c">●</span> 運動店　<span style="color:#3e5c4b">●</span> 行程點　<span style="color:#8a5a9c">●</span> Mandarake　<span style="color:#b8860b">●</span> 壽司郎（公仔有貨）　<span style="color:#2f6b8f">●</span> Hard Off　<span style="color:#7a3b8f">●</span> Hobby Off<br>
+        <b>⚠️</b> 岡山縣無 Hobby Off（モール店結業）；岡山⇄大阪沿線亦無 Mandarake，最近係神戶 PUCK2。
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+  </div><!-- /view-map -->
+
+  <!-- ================= PLAN VIEW ================= -->
+  <div id="view-plan" class="view">
+  <div class="tabs" id="dayTabs">
+    <button class="on" data-day="d1">第一日</button>
+  </div>
+  <div class="prog"><div class="bar"><i id="pbar"></i></div><span id="ptxt">0 / 0</span></div>
+  <div class="legend-states">
+    <span><b style="background:#3e5c4b">✓</b>完成</span>
+    <span><b style="background:#d4a017">◐</b>部分／進行中</span>
+    <span><b style="background:#8a8272">✕</b>跳過／唔去</span>
+    <span><b style="background:#fff;border:1.5px solid #c0b7a6;color:#8a8272">　</b>未做</span>
+    <span style="color:#c05f3c">撳多幾次輪住轉</span>
+  </div>
+
+  <div id="daylist"></div>
+
+  <!-- ===== add / edit item sheet ===== -->
+  <div id="sheetBack" class="sheetback" hidden></div>
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheetHead">
+      <span id="sheetTitle">加新行程</span>
+      <button id="sheetX" type="button">✕</button>
+    </div>
+    <div class="sheetBody">
+      <label class="fld"><span>日</span>
+        <select id="fDay"><option value="d1">第一日 11/7</option><option value="d2">第二日 11/8</option><option value="d3">第三日 11/9</option></select>
+      </label>
+      <label class="fld"><span>時間</span>
+        <input id="fTime" type="text" placeholder="例：06:50 或 07:00–07:41" autocomplete="off">
+      </label>
+      <label class="fld"><span>標題</span>
+        <input id="fTitle" type="text" placeholder="例：🍜 神座拉麵" autocomplete="off">
+      </label>
+      <label class="fld"><span>備註</span>
+        <textarea id="fSub" rows="3" placeholder="價錢、營業時間、位置、注意事項…"></textarea>
+      </label>
+      <label class="fld"><span>類型</span>
+        <select id="fKind">
+          <option value="food">🍜 食</option><option value="sight">🏯 景點</option>
+          <option value="shop">🛍 購物</option><option value="move">🚄 交通</option>
+          <option value="run">🏃 跑步</option><option value="rest">😴 休息</option>
+          <option value="gear">🎒 裝備</option><option value="warn">⚠️ 重要／風險</option>
+          <option value="star">⭐ 重點</option><option value="event">🎪 活動</option>
+          <option value="stay">🏨 住宿</option><option value="other">其他</option>
+        </select>
+      </label>
+      <label class="fld"><span>地圖地點</span>
+        <select id="fPlace"><option value="">（不連地圖）</option></select>
+      </label>
+      <div id="photoPreview" class="photoPrev" hidden><img id="photoImg" alt=""></div>
+    </div>
+    <div class="sheetFoot">
+      <button id="btnDelete" type="button" class="danger" hidden>刪除</button>
+      <button id="btnSave" type="button" class="primary">儲存</button>
+    </div>
+  </div>
+
+  <div id="fabWrap">
+    <button id="fabCamera" type="button" class="bub"><span class="ic">📷</span><span class="lb">開相機</span></button>
+    <button id="fabPick" type="button" class="bub"><span class="ic">🖼</span><span class="lb">揀相片</span></button>
+    <button id="fab" type="button" title="加相片">＋</button>
+  </div>
+  <input id="filePick" type="file" accept="image/*" hidden>
+  <input id="camPick" type="file" accept="image/*" capture="environment" hidden>
+
+  <!-- ===== item detail view ===== -->
+  <div id="detBack" class="sheetback" hidden></div>
+  <div id="detail" class="sheet detail" hidden>
+    <div class="sheetHead">
+      <span id="detTitle">項目詳情</span>
+      <button id="detX" type="button">✕</button>
+    </div>
+    <div class="sheetBody" id="detBody"></div>
+    <div class="sheetFoot">
+      <button id="detAttach" type="button" class="attach">📷 加相／收據</button>
+      <button id="detEdit" type="button" class="primary">編輯</button>
+    </div>
+  </div>
+  <input id="detFilePick" type="file" accept="image/*" multiple hidden>
+<div class="saved" id="toast">✓ 已記錄</div>
+    <div class="syncbar"><span id="syncState">連線中…</span><span id="syncWho"></span></div>
+  </div><!-- /view-plan -->
+
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const M="#8a5a9c";
+const POINTS=[
+// ===== 行程點 =====
+{id:1,g:"okayama",c:"#3e5c4b",lat:34.66574,lng:133.91757,n:"東橫INN岡山駅東口（酒店）",en:"Toyoko Inn Okayama-eki Higashi-guchi",t:"住宿 11/7–11/9",h:"In 15:00／Out 10:00｜早餐 6:30–9:00",a:"岡山市北区駅前町1-7-3",d:"JR岡山駅東口徒步3分鐘｜086-224-1045"},
+{id:2,g:"okayama",c:"#3e5c4b",lat:34.66540,lng:133.91866,n:"岡山站（JR）＋儲物櫃",en:"Okayama Station",t:"11/7 到著｜11/9 16:52 Nozomi 102",h:"Locker 24 小時（¥700–800）",a:"岡山市北区駅元町1-1",d:"11/9 checkout 後寄行李，14:30 取回。"},
+{id:3,g:"okayama",c:"#3e5c4b",lat:34.68350,lng:133.91590,n:"選手包報到處（シゲトーアリーナ）",en:"Shigeto Arena Okayama",t:"11/7 12:00–12:45",h:"受付 9:00–19:30（當日冇報到）",a:"岡山市北区いずみ町2-1-3",d:"帶護照正本＋引換証。駅西口徒步20分鐘。"},
+{id:4,g:"okayama",c:"#3e5c4b",lat:34.68280,lng:133.91730,n:"岡山馬拉松 EXPO",en:"Okayama Marathon EXPO 2026",t:"11/7 12:45｜Clinic 13:25",h:"11/7 9:00–19:30｜11/8 9:00–15:30",a:"JFE晴れの国スタジアム前廣場",d:"13:25–13:55 有森裕子等四人 Running Clinic。"},
+{id:5,g:"okayama",c:"#3e5c4b",lat:34.66660,lng:133.92990,n:"岡山後樂園",en:"Okayama Korakuen",t:"11/7 15:30–16:45",h:"8:00–17:00（入園至16:45）¥500",a:"岡山市北区後楽園1-5",d:"日本三名園。紅葉見頃 11/24 後。"},
+{id:6,g:"himeji",c:"#3e5c4b",lat:34.83945,lng:134.69390,n:"姬路城",en:"Himeji Castle",t:"11/9 10:50–13:00",h:"9:00–17:00（入城至16:00）¥2,500",a:"姬路市本町68",d:"walk-in 當日券。大天守限1,000人/小時、樓梯陡窄、城內脫鞋。"},
+
+// ===== 岡山 =====
+{id:10,g:"okayama",c:"#c05f3c",lat:34.66420,lng:133.92030,n:"羅針盤 岡山店（二手動漫）",en:"Lashinbang Okayama",t:"11/7 18:30–19:45",h:"10:00–20:00",a:"北区本町6-30 第1セントラルビル2号館4F",dist:"岡山站 0.2km｜徒步3分鐘",d:"二手 figure／立牌／同人誌／Chiikawa。同 Animate 同棟。"},
+{id:11,g:"okayama",c:"#c05f3c",lat:34.66420,lng:133.92030,n:"Animate 岡山店",en:"Animate Okayama",t:"11/7 18:30–19:45",h:"10:00–20:00｜086-227-6888",a:"北区本町6-30 4F",dist:"岡山站 0.2km｜徒步3分鐘",d:"新品周邊、漫畫、輕小說、CD/DVD。"},
+{id:12,g:"okayama",c:"#3a5b9c",lat:34.6753493,lng:133.9204107,n:"Step Sports 岡山店（跑步專門店）",en:"Step Sports Okayama",t:"11/7 14:40–15:05",h:"11:00–20:00｜086-252-4192",a:"北区絵図町1-50 OSK健幸プラザ1F",dist:"岡山站 1.1km｜徒步13分鐘",d:"中四國 No.1 田徑專門店。會場徒步5分鐘。"},
+{id:13,g:"okayama",c:"#c05f3c",lat:34.6485421,lng:133.8782374,n:"Book Off 岡山西長瀬店",en:"BOOKOFF Okayama-Nishinagase",t:"沿線站順路",h:"10:00–21:45｜086-245-6230",a:"北区西長瀬1208-20",dist:"JR 備前西市站 0.6km｜徒步8分鐘",d:"漫畫／遊戲／卡／玩具。"},
+{id:14,g:"okayama",c:"#c05f3c",lat:34.6167256,lng:133.8637895,n:"Book Off 岡山妹尾店",en:"BOOKOFF Okayama-Senoo",t:"沿線站順路",h:"10:00–22:00｜086-281-9144",a:"南区妹尾2620-1",dist:"JR 妹尾站 0.6km｜徒步8分鐘",d:"岡山市南區。"},
+{id:15,g:"okayama",c:"#c05f3c",lat:34.6763835,lng:133.980394,n:"Book Off 250号東岡山店",en:"BOOKOFF 250-go Higashi-Okayama",t:"沿線站順路",h:"10:00–23:00｜086-208-6056",a:"中区神下136-2",dist:"JR 東岡山站 0.75km｜徒步10分鐘",d:"岡山縣開最夜（23:00）。"},
+{id:16,g:"okayama",c:"#c05f3c",lat:34.6032149,lng:133.7644796,n:"羅針盤 倉敷 Ario 店（二手動漫）",en:"Lashinbang Ario-Kurashiki",t:"沿線站順路",h:"10:00–21:00",a:"倉敷市水江1 アリオ倉敷 2F",dist:"JR 倉敷站 0.3km｜徒步4分鐘",d:"岡山縣第二間羅針盤，另設買取中心。"},
+{id:17,g:"okayama",c:"#c05f3c",lat:34.6044141,lng:133.7467269,n:"Animate 倉敷店（AEON Mall）",en:"Animate AEON Mall Kurashiki",t:"沿線站順路",h:"10:00–21:00｜086-441-0820",a:"倉敷市水江1 イオンモール倉敷 2F",dist:"JR 倉敷站 1.8km｜徒步22分鐘",d:"岡山縣第二間 Animate。"},
+{id:18,g:"okayama",c:"#c05f3c",lat:34.6100244,lng:133.7742882,n:"Book Off 倉敷浜店",en:"BOOKOFF Kurashiki-Hama",t:"沿線站順路",h:"10:00–21:00｜086-424-5551",a:"倉敷市浜町2-16-45",dist:"JR 倉敷站 1.3km｜徒步16分鐘",d:"近倉敷站。"},
+
+// ===== 姬路 =====
+{id:30,g:"himeji",c:"#c05f3c",lat:34.8286263,lng:134.6926612,n:"羅針盤 姬路店（二手動漫）",en:"Lashinbang Himeji",t:"11/9 13:00–13:40",h:"10:00–20:00｜079-226-3050",a:"姬路市東駅前町54 ハリマセンタービル3F",dist:"JR 姬路站 0.25km｜徒步3分鐘",d:"二手 figure／精品／同人誌。11/9 行完姬路城順路。"},
+{id:31,g:"himeji",c:"#3a5b9c",lat:34.8298071,lng:134.6841288,n:"Step Sports 姬路店（跑步）",en:"Step Sports Himeji",t:"姬路備用",h:"約11:00–19:00",a:"姬路市（姬路站南）",dist:"JR 姬路站 0.5km｜徒步7分鐘",d:"岡山店冇貨可喺姬路補。"},
+{id:34,g:"himeji",c:"#c05f3c",lat:34.8555518,lng:134.704916,n:"Book Off 姬路増位店",en:"BOOKOFF Himeji-Masui",t:"沿線站順路",h:"10:00–21:00",a:"姬路市増位本町2-26",dist:"JR 増位站 0.3km｜徒步4分鐘",d:"漫畫／遊戲／卡。JR 站隔籬。"},
+
+// ===== 神戶 =====
+{id:40,g:"kobe",c:"#3a5b9c",lat:34.6888511,lng:135.1884854,n:"Step Sports 神戶店（跑步）",en:"Step Sports Kobe",t:"神戶",h:"11:00–20:00｜078-325-0921",a:"神戸市中央区元町通1-10-1",dist:"JR 元町站 0.2km｜徒步3分鐘",d:"元町商店街內。"},
+{id:41,g:"kobe",c:"#c05f3c",lat:34.6915615,lng:135.1925099,n:"羅針盤 神戶店（二手動漫）",en:"Lashinbang Kobe",t:"神戶",h:"11:00–20:00",a:"神戸市中央区三宮町1-9-1 センタープラザ東館2F",dist:"JR 三宮站 0.5km｜徒步6分鐘",d:"三宮中心街。"},
+
+// ===== 大阪 =====
+{id:50,g:"osaka",c:"#c05f3c",lat:34.6764924,lng:135.5015768,n:"Book Off 大阪心齋橋店",en:"BOOKOFF Osaka-Shinsaibashi",t:"大阪",h:"10:00–22:00｜06-4704-3530",a:"大阪市中央区南船場3-6-21",dist:"JR 心齋橋站 0.4km｜徒步5分鐘",d:"漫畫／遊戲／卡／玩具。"},
+{id:51,g:"osaka",c:"#c05f3c",lat:34.6604591,lng:135.5047945,n:"羅針盤 大阪日本橋店（二手動漫）",en:"Lashinbang Osaka-Nipponbashi",t:"大阪",h:"約11:00–20:00",a:"大阪市浪速区日本橋4（オタロード）",dist:"JR 日本橋站 0.45km｜徒步6分鐘",d:"オタロード，動漫二手集中地。"},
+{id:52,g:"osaka",c:"#3a5b9c",lat:34.7075661,lng:135.4987812,n:"Step Sports 大阪店（跑步）",en:"Step Sports Osaka",t:"大阪",h:"11:00–20:00｜06-6292-2213",a:"大阪市北区茶屋町14-13",dist:"JR 大阪站 0.6km｜徒步8分鐘",d:"茶屋町，阪急梅田徒步5分鐘。"},
+
+// ===== Hobby Off（JR 站 2km 內，6 間）=====
+{id:140,g:"osaka",c:"#7a3b8f",lat:34.766928,lng:135.649817,n:"Hobby Off バロー寝屋川店（Hobby Off）",en:"ホビーオフバロー寝屋川店",t:"🧸 Hobby Off（玩具／figure／模型／卡）",h:"10:00～20:00｜072-800-3023",a:"大阪府寝屋川市寝屋南2-21-25バロー寝屋川店２階",dist:"寝屋川公園站 0.34km",d:"Hobby Off = figure／玩具／模型／集換卡專門。通常同 Hard Off / Off House 同址複合店。hobby off / hobbyoff / ホビーオフ"},
+{id:141,g:"kobe",c:"#7a3b8f",lat:34.72792,lng:135.13683,n:"Hobby Off 神戸鈴蘭台店（Hobby Off）",en:"ホビーオフ神戸鈴蘭台店",t:"🧸 Hobby Off（玩具／figure／模型／卡）",h:"10:00～19:30｜078-959-6368",a:"兵庫県神戸市北区北五葉1丁目13 1F",dist:"鈴蘭台站 0.44km",d:"Hobby Off = figure／玩具／模型／集換卡專門。通常同 Hard Off / Off House 同址複合店。hobby off / hobbyoff / ホビーオフ"},
+{id:142,g:"himeji",c:"#7a3b8f",lat:34.832683,lng:134.5935364,n:"Hobby Off 兵庫太子店（Hobby Off）",en:"ホビーオフ兵庫太子店",t:"🧸 Hobby Off（玩具／figure／模型／卡）",h:"10:00～20:00｜079-275-1311",a:"兵庫県揖保郡太子町東出262-1",dist:"太子站 0.59km",d:"Hobby Off = figure／玩具／模型／集換卡專門。通常同 Hard Off / Off House 同址複合店。hobby off / hobbyoff / ホビーオフ"},
+{id:143,g:"kobe",c:"#7a3b8f",lat:34.742225,lng:135.366108,n:"Hobby Off 西宮店（Hobby Off）",en:"ホビーオフ西宮店",t:"🧸 Hobby Off（玩具／figure／模型／卡）",h:"10:00～20:00｜0798-69-1169",a:"兵庫県西宮市中島町17-10",dist:"西宮站 1.51km",d:"Hobby Off = figure／玩具／模型／集換卡專門。通常同 Hard Off / Off House 同址複合店。hobby off / hobbyoff / ホビーオフ"},
+{id:144,g:"kobe",c:"#7a3b8f",lat:34.648044,lng:135.05008,n:"Hobby Off 神戸星陵台店（Hobby Off）",en:"ホビーオフ神戸星陵台店",t:"🧸 Hobby Off（玩具／figure／模型／卡）",h:"10:00～19:30｜078-786-6930",a:"兵庫県神戸市垂水区星陵台4-4-31",dist:"名谷站 1.84km",d:"Hobby Off = figure／玩具／模型／集換卡專門。通常同 Hard Off / Off House 同址複合店。hobby off / hobbyoff / ホビーオフ"},
+{id:145,g:"himeji",c:"#7a3b8f",lat:34.857923,lng:134.660641,n:"Hobby Off 姫路御立店（Hobby Off）",en:"ホビーオフ姫路御立店",t:"🧸 Hobby Off（玩具／figure／模型／卡）",h:"10:00～19:30｜079-295-5541",a:"兵庫県姫路市上手野字山吹285-1",dist:"太市站 1.9km",d:"Hobby Off = figure／玩具／模型／集換卡專門。通常同 Hard Off / Off House 同址複合店。hobby off / hobbyoff / ホビーオフ"},
+
+// ===== Hard Off（JR 站 2km 內，14 間）=====
+{id:120,g:"osaka",c:"#2f6b8f",lat:34.764417,lng:135.569803,n:"Hard Off 南摂津駅前店（Hard Off）",en:"ハードオフ南摂津駅前店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～20:00｜06-6732-9971",a:"大阪府摂津市東一津屋11-15",dist:"南摂津站 0.18km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:121,g:"osaka",c:"#2f6b8f",lat:34.766928,lng:135.649817,n:"Hard Off バロー寝屋川店（Hard Off）",en:"ハードオフバロー寝屋川店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～20:00｜072-800-3021",a:"大阪府寝屋川市寝屋南2-21-25バロー寝屋川店２階",dist:"寝屋川公園站 0.34km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:122,g:"osaka",c:"#2f6b8f",lat:34.73866,lng:135.52798,n:"Hard Off 東淀川店（Hard Off）",en:"ハードオフ東淀川店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:30～19:30｜06-6195-6330",a:"大阪府大阪市東淀川区菅原2丁目8-9",dist:"東淀川站 0.41km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:123,g:"himeji",c:"#2f6b8f",lat:34.832683,lng:134.5935364,n:"Hard Off 兵庫太子店（Hard Off）",en:"ハードオフ兵庫太子店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～20:00｜079-275-1311",a:"兵庫県揖保郡太子町東出262-1",dist:"太子站 0.59km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:124,g:"osaka",c:"#2f6b8f",lat:34.834716,lng:135.501257,n:"Hard Off 171号箕面店（Hard Off）",en:"ハードオフ171号箕面店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～20:00｜072-728-5525",a:"大阪府箕面市今宮3丁目3-21",dist:"箕面站 0.6km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:125,g:"osaka",c:"#2f6b8f",lat:34.732745,lng:135.593756,n:"Hard Off 門真試験場前店（Hard Off）",en:"ハードオフ門真試験場前店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～20:00｜06-6115-5199",a:"大阪府門真市一番町5-18",dist:"門真市站 0.68km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:126,g:"kobe",c:"#2f6b8f",lat:34.807504,lng:135.354118,n:"Hard Off 宝塚店（Hard Off）",en:"ハードオフ宝塚店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00~19:00｜0797-62-9980",a:"兵庫県宝塚市旭町1丁目2-10",dist:"宝塚站 0.88km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:127,g:"kobe",c:"#2f6b8f",lat:34.71481,lng:135.24688,n:"Hard Off 神戸灘店（Hard Off）",en:"ハードオフ神戸灘店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～19:30｜078-200-5444",a:"兵庫県神戸市灘区徳井町3丁目1-1",dist:"六甲道站 1.09km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:128,g:"okayama",c:"#2f6b8f",lat:34.65067,lng:133.897312,n:"Hard Off 岡山野田店（Hard Off）",en:"ハードオフ岡山野田店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～19:00｜086-243-0034",a:"岡山県岡山市北区野田3-23-12",dist:"北長瀬站 1.16km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:129,g:"osaka",c:"#2f6b8f",lat:34.6385,lng:135.60427,n:"Hard Off 八尾萱振店（Hard Off）",en:"ハードオフ八尾萱振店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"11:00~20:00｜072-920-7020",a:"大阪府八尾市萱振町3丁目54-10",dist:"八尾站 1.44km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:130,g:"kobe",c:"#2f6b8f",lat:34.742225,lng:135.366108,n:"Hard Off 西宮店（Hard Off）",en:"ハードオフ西宮店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～20:00｜0798-69-1531",a:"兵庫県西宮市中島町17-10",dist:"西宮站 1.51km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:131,g:"osaka",c:"#2f6b8f",lat:34.64701,lng:135.4714,n:"Hard Off 大阪大正店（Hard Off）",en:"ハードオフ大阪大正店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:30～19:30｜06-6964-8027",a:"大阪府大阪市大正区小林東3-4-18",dist:"大正站 1.67km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:132,g:"kobe",c:"#2f6b8f",lat:34.648044,lng:135.05008,n:"Hard Off 神戸星陵台店（Hard Off）",en:"ハードオフ神戸星陵台店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～19:30｜078-787-7488",a:"兵庫県神戸市垂水区星陵台4-4-31",dist:"名谷站 1.84km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+{id:133,g:"himeji",c:"#2f6b8f",lat:34.857923,lng:134.660641,n:"Hard Off 姫路御立店（Hard Off）",en:"ハードオフ姫路御立店",t:"🛋 大型二手店（家電／家具／樂器／玩具）",h:"10:00～19:30｜079-295-5542",a:"兵庫県姫路市上手野山吹285-1",dist:"太市站 1.9km",d:"Hard Off = 大型二手綜合店。複合店通常同 Hobby Off / Off House 同址，figure／玩具要睇有冇 Hobby Off。hard off / hardoff / ハードオフ"},
+
+// ===== 壽司郎（布甸狗公仔仲有貨，JR 站 2km 內）=====
+{id:80,g:"himeji",c:"#b8860b",lat:34.799938,lng:134.66938,n:"壽司郎 姫路飾磨店（公仔有貨）",en:"スシロー 姫路飾磨店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜079-243-1022",a:"兵庫県姫路市飾磨区細江2580番地",dist:"飾磨站 0.43km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:81,g:"okayama",c:"#b8860b",lat:34.677629,lng:133.981481,n:"壽司郎 東岡山店（公仔有貨）",en:"スシロー 東岡山店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜086-208-5411",a:"岡山県岡山市中区神下161-1",dist:"東岡山站 0.62km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:82,g:"kobe",c:"#b8860b",lat:34.704658,lng:135.226564,n:"壽司郎 灘店（公仔有貨）",en:"スシロー 灘店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜078-806-0161",a:"兵庫県神戸市灘区都通3-1-1",dist:"灘站 0.21km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:83,g:"himeji",c:"#b8860b",lat:34.8201374,lng:134.6927075,n:"壽司郎 姫路北条店（公仔有貨）",en:"スシロー 姫路北条店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜079-287-1972",a:"兵庫県姫路市北条宮の町403",dist:"北条駅 0.25km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:84,g:"kobe",c:"#b8860b",lat:34.6693677,lng:135.1522231,n:"壽司郎 長田駅前店（公仔有貨）",en:"スシロー 長田駅前店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜078-578-8461",a:"兵庫県神戸市長田区五番町6-2-1",dist:"長田站 0.21km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:85,g:"osaka",c:"#b8860b",lat:34.707367,lng:135.511437,n:"壽司郎 天神橋5丁目店（公仔有貨）",en:"スシロー 天神橋5丁目店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-4800-1780",a:"大阪府大阪市北区天神橋5丁目6-24　中央天神橋第1ビル　1F",dist:"天神橋5丁目站 0.0km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:86,g:"okayama",c:"#b8860b",lat:34.671705,lng:133.759657,n:"壽司郎 総社井手店（公仔有貨）",en:"スシロー 総社井手店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜0866-90-2230",a:"岡山県総社市井手346番地1",dist:"総社站 1.86km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:87,g:"osaka",c:"#b8860b",lat:34.666643,lng:135.503473,n:"壽司郎 難波アムザ店（公仔有貨）",en:"スシロー 難波アムザ店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6630-6871",a:"大阪府大阪市中央区千日前2丁目9番17号　アムザ1000　4階",dist:"難波站 0.33km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:88,g:"kobe",c:"#b8860b",lat:34.692646,lng:135.191262,n:"壽司郎 三ノ宮いくたロード店（公仔有貨）",en:"スシロー 三ノ宮いくたロード店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜078-335-0740",a:"兵庫県神戸市中央区北長狭通2丁目12番13号　キングズコーストビル3階",dist:"三宮站 0.46km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:89,g:"osaka",c:"#b8860b",lat:34.676896,lng:135.501232,n:"壽司郎 心斎橋店（公仔有貨）",en:"スシロー 心斎橋店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6121-7690",a:"大阪府大阪市中央区南船場三丁目10番11号　FPG links SHINSAIBASHI　3F",dist:"心斎橋站 0.46km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:90,g:"osaka",c:"#b8860b",lat:34.645809,lng:135.515697,n:"壽司郎 天王寺店（公仔有貨）",en:"スシロー 天王寺店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-4399-5210",a:"大阪府大阪市阿倍野区松崎町1丁目2番8号　都シティ大阪天王寺　2階",dist:"天王寺站 0.16km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:91,g:"osaka",c:"#b8860b",lat:34.705851,lng:135.499183,n:"壽司郎 梅田茶屋町店（公仔有貨）",en:"スシロー 梅田茶屋町店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6485-0371",a:"大阪府大阪市北区茶屋町2-16　イースクエア茶屋町6階",dist:"梅田站 0.39km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:92,g:"osaka",c:"#b8860b",lat:34.701767,lng:135.500849,n:"壽司郎 お初天神通り店（公仔有貨）",en:"スシロー お初天神通り店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6130-8673",a:"大阪府大阪市北区曽根崎2丁目15-20　SWINGうめだ5階",dist:"梅田站 0.27km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:93,g:"osaka",c:"#b8860b",lat:34.69686,lng:135.487669,n:"壽司郎 福島ラグザ阪神店（公仔有貨）",en:"スシロー 福島ラグザ阪神店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6442-3008",a:"大阪府大阪市福島区福島5丁目6-16　ラグザB1",dist:"福島站 0.01km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:94,g:"kobe",c:"#b8860b",lat:34.692822,lng:135.202726,n:"壽司郎 生田川インター店（公仔有貨）",en:"スシロー 生田川インター店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜078-251-3410",a:"兵庫県神戸市中央区浜辺通1丁目1-18　1F",dist:"三宮站 0.69km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:95,g:"okayama",c:"#b8860b",lat:34.654387,lng:133.912039,n:"壽司郎 岡山大供店（公仔有貨）",en:"スシロー 岡山大供店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜086-234-7567",a:"岡山県岡山市北区大供本町703-1",dist:"大元站 0.65km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:96,g:"osaka",c:"#b8860b",lat:34.66841337,lng:135.5024737,n:"壽司郎 道頓堀店（公仔有貨）",en:"スシロー 道頓堀店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6121-6731",a:"大阪府大阪市中央区道頓堀1丁目7-21　中座くいだおれビル　2階",dist:"難波站 0.35km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:97,g:"osaka",c:"#b8860b",lat:34.69450996,lng:135.4757858,n:"壽司郎 阪神野田駅店（公仔有貨）",en:"スシロー 阪神野田駅店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6131-5328",a:"大阪府大阪市福島区海老江1丁目1-17　野田アプラ1階",dist:"野田阪神站 0.02km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:98,g:"osaka",c:"#b8860b",lat:34.66464939,lng:135.5030239,n:"壽司郎 千日前店（公仔有貨）",en:"スシロー 千日前店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6710-9243",a:"大阪府大阪市中央区難波千日前12-7　YES・NAMBAビル　4F",dist:"難波站 0.31km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:99,g:"osaka",c:"#b8860b",lat:34.64645594,lng:135.5117747,n:"壽司郎 あべのアポロ店（公仔有貨）",en:"スシロー あべのアポロ店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6537-7983",a:"大阪府大阪市阿倍野区阿倍野筋1丁目5-31　きんえいアポロビル 8F",dist:"天王寺站 0.21km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:100,g:"osaka",c:"#b8860b",lat:34.65683667,lng:135.4981948,n:"壽司郎 大国町駅前店（公仔有貨）",en:"スシロー 大国町駅前店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜06-6631-0451",a:"大阪府大阪市浪速区敷津東2丁目5-5　グランセジュール大国町1階",dist:"大国町站 0.09km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:101,g:"osaka",c:"#b8860b",lat:34.704558,lng:135.496864,n:"壽司郎 リンクス梅田店（公仔有貨）",en:"スシロー リンクス梅田店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 11:00–23:00｜06-6136-4465",a:"大阪府大阪市北区大深町1-1　LINKS UMEDA 8階",dist:"大阪站 0.25km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:102,g:"kobe",c:"#b8860b",lat:34.762896,lng:135.17239,n:"壽司郎 谷上店（公仔有貨）",en:"スシロー 谷上店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜078-582-3570",a:"兵庫県神戸市北区谷上東町8-23",dist:"谷上站 0.11km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+{id:103,g:"kobe",c:"#b8860b",lat:34.652848,lng:135.069854,n:"壽司郎 垂水名谷店（公仔有貨）",en:"スシロー 垂水名谷店",t:"🐹 布甸狗公仔未售完",h:"週一至五 11:00–23:00｜週末假日 10:30–23:00｜078-707-5090",a:"兵庫県神戸市垂水区名谷町847",dist:"名谷站 0.32km",d:"Sushiro / sushi / 壽司郎 / スシロー。官方品切れ頁冇「販売終了」記錄。公仔隨機派款。食 ¥1,320 起軟飲套餐。"},
+
+// ===== Mandarake 全 16 店 =====
+{id:60,g:"mandarake",c:M,lat:34.69100,lng:135.19200,n:"Mandarake PUCK2（神戶三宮）★最近關西",en:"まんだらけ PUCK2",t:"關西圈最近嘅 Mandarake",h:"12:00–20:00（年中無休）｜078-600-0777",a:"神戸市中央区三宮町1-8-1 さんプラザ2F 236号",dist:"距元町／三宮站 0.5km｜徒步6分鐘",d:"2025-10 由 PUCK1 擴張移轉，面積約 5 倍。本／雜誌／TOY／鐵道／迷你車／娃娃／卡／遊戲。JR岡山 → 新幹線+JR 約 1小時40分。"},
+{id:61,g:"mandarake",c:M,lat:34.70400,lng:135.50000,n:"Mandarake うめだ店（大阪梅田）",en:"まんだらけ うめだ店",t:"大阪",h:"12:00–20:00｜06-6363-7777",a:"大阪市北区堂山町9-28",dist:"距 JR 大阪站 0.4km｜徒步5分鐘",d:"2026-04 開 30 周年店。梅田茶屋町旁。"},
+{id:62,g:"mandarake",c:M,lat:34.66000,lng:135.50300,n:"Mandarake Grand Chaos（大阪日本橋）",en:"まんだらけ グランドカオス",t:"大阪",h:"12:00–20:00｜06-6636-7077",a:"大阪市浪速区日本橋4-12-6",dist:"距 JR 日本橋站 0.56km｜徒步7分鐘",d:"大阪オタロード核心，同羅針盤日本橋店同一區。"},
+{id:63,g:"mandarake",c:M,lat:34.99300,lng:135.76400,n:"Mandarake 京都店",en:"まんだらけ 京都店",t:"京都",h:"12:00–20:00｜075-255-0777",a:"京都市下京区四条通寺町東入御旅町35 京都高島屋S.C. T8 4F",dist:"距 JR 京都站 0.93km｜徒步12分鐘／地鐵1站",d:"2023-10 開。四條通高島屋內。"},
+{id:64,g:"mandarake",c:M,lat:35.70000,lng:139.77100,n:"Mandarake Complex（秋葉原）",en:"まんだらけ コンプレックス",t:"東京",h:"12:00–20:00｜03-3252-7007",a:"東京都千代田区外神田3-11-12",dist:"距 JR 秋葉原站 0.25km｜徒步3分鐘",d:"秋葉原本館，8 層。"},
+{id:65,g:"mandarake",c:M,lat:35.70100,lng:139.77100,n:"Mandarake CoCoo（秋葉原）",en:"まんだらけ CoCoo",t:"東京",h:"12:00–20:00｜03-3527-1631",a:"東京都千代田区神田練塀町13-1 SEEKBASE AKI-OKA",dist:"距 JR 秋葉原站 0.34km｜徒步4分鐘",d:"女性向／同人誌為主。"},
+{id:66,g:"mandarake",c:M,lat:35.70750,lng:139.66580,n:"Mandarake 中野店（總店）",en:"まんだらけ 中野店",t:"東京",h:"12:00–20:00｜03-3228-0007",a:"東京都中野区中野5-52-15",dist:"距 JR 中野站 0.1km｜徒步1分鐘",d:"總店，中野 Broadway 內。"},
+{id:67,g:"mandarake",c:M,lat:35.66000,lng:139.69900,n:"Mandarake 渋谷店",en:"まんだらけ 渋谷店",t:"東京",h:"12:00–20:00｜03-3477-0777",a:"東京都渋谷区宇田川町31-2 渋谷BEAM B2F",dist:"距 JR 渋谷站 0.32km｜徒步4分鐘",d:"BEAM 地下 2 樓。"},
+{id:68,g:"mandarake",c:M,lat:35.73000,lng:139.71500,n:"Mandarake ラララ（池袋）",en:"まんだらけ ラララ",t:"東京",h:"12:00–20:00｜03-5928-0771",a:"東京都豊島区東池袋3-15-2 B1F",dist:"距 JR 池袋站 0.37km｜徒步5分鐘",d:"池袋女性向館。"},
+{id:69,g:"mandarake",c:M,lat:35.73000,lng:139.71300,n:"Mandarake 那由多（池袋）",en:"まんだらけ 那由多",t:"東京",h:"12:00–20:00｜03-6887-7007",a:"東京都豊島区東池袋1-50-35 池袋PARCO B2F",dist:"距 JR 池袋站 0.2km｜徒步3分鐘",d:"PARCO B2F。"},
+{id:70,g:"mandarake",c:M,lat:35.15900,lng:136.90500,n:"Mandarake 名古屋店",en:"まんだらけ 名古屋店",t:"名古屋",h:"12:00–20:00｜052-261-0700",a:"愛知県名古屋市中区大須3-18-21",dist:"距地鐵大須觀音站 0.3km｜徒步4分鐘",d:"大須商店街。"},
+{id:71,g:"mandarake",c:M,lat:36.55800,lng:139.89700,n:"Mandarake 宇都宮店",en:"まんだらけ 宇都宮店",t:"栃木",h:"12:00–20:00｜028-636-0711",a:"栃木県宇都宮市曲師町2-8 フェスタ4F",dist:"距 JR 宇都宮站 0.18km｜徒步3分鐘",d:"宇都宮站前。"},
+{id:72,g:"mandarake",c:M,lat:43.05830,lng:141.35170,n:"Mandarake 札幌店",en:"まんだらけ 札幌店",t:"北海道",h:"12:00–20:00｜011-207-7773",a:"札幌市中央区南3条西5-1-1 NORBESAビル2F",dist:"距地鐵薄野站 0.2km｜徒步3分鐘",d:"NORBESA 2F。"},
+{id:73,g:"mandarake",c:M,lat:33.58900,lng:130.39300,n:"Mandarake 福岡店",en:"まんだらけ 福岡店",t:"福岡",h:"12:00–20:00｜092-716-7774",a:"福岡市中央区大名2-9-5 グランドビル",dist:"距地鐵天神站 0.58km｜徒步7分鐘",d:"大名地區。"},
+{id:74,g:"mandarake",c:M,lat:33.88700,lng:130.88300,n:"Mandarake 小倉店",en:"まんだらけ 小倉店",t:"福岡",h:"12:00–20:00｜093-512-1777",a:"北九州市小倉北区浅野2-14-5 あるあるシティ4F",dist:"距 JR 小倉站 0.04km｜徒步1分鐘",d:"**全日本最貼 JR 站嘅 Mandarake**。中國地區唯一一間。"},
+{id:75,g:"mandarake",c:M,lat:35.89000,lng:140.50000,n:"Mandarake SAHRA（佐原）",en:"まんだらけ SAHRA",t:"千葉",h:"12:00–20:00｜0478-50-3337",a:"千葉県香取市佐原ハ4365",dist:"距 JR 佐原站 約1.5km｜的士4分鐘",d:"倉庫型店，偏遠。"}
+];
+
+const GNAME={okayama:"岡山縣",himeji:"姬路",kobe:"神戶",osaka:"大阪",mandarake:"Mandarake（全 16 店）"};
+window.MAP=L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([35.2,136.5],6);const map=window.MAP;
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+
+const markers={};
+// separate co-located points slightly (visual only, ~12m radius)
+const seen={};
+POINTS.forEach(p=>{
+  const key=p.lat.toFixed(5)+','+p.lng.toFixed(5);
+  if(seen[key]!==undefined){
+    seen[key]+=1;
+    const a=seen[key]*2.399963; // golden angle
+    const r=0.00013*(1+Math.floor(seen[key]/6));
+    p.lat+=Math.cos(a)*r; p.lng+=Math.sin(a)*r;
+  } else { seen[key]=0; }
+});
+POINTS.forEach(p=>{
+  const icon=L.divIcon({className:'pinwrap',
+    html:`<div class="pinball" style="background:${p.c}">${p.id}</div>`,
+    iconSize:[36,36],iconAnchor:[18,18],popupAnchor:[0,-20]});
+  const m=L.marker([p.lat,p.lng],{icon}).addTo(map);
+  m.bindPopup(`<h3>${p.id}. ${p.n}</h3><div class="en">${p.en}</div>
+    <div class="m">${p.t}</div><div class="hr">🕐 ${p.h}</div>
+    ${p.dist?`<div style="color:#c05f3c;font-weight:600;font-size:11.5px;margin-bottom:4px">📍 ${p.dist}</div>`:''}
+    <div>${p.a}</div><div style="margin-top:5px">${p.d}</div>
+    <div style="margin-top:7px"><a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank">→ Google Maps 導航</a></div>`);
+  m.on('click',()=>highlight(p.id));
+  markers[p.id]=m;
+});
+
+const listEl=document.getElementById('list'), countEl=document.getElementById('count');
+let curQ="";
+const TYPES=[...document.querySelectorAll('.tchk')].filter(c=>c.value!=='all');
+const cbAll=document.getElementById('cbAll');
+
+// classify each point into a type key
+function ptype(p){
+  if(p.id>=140 && p.id<200) return 'hobbyoff';
+  if(p.id>=120 && p.id<140) return 'hardoff';
+  if(p.id>=80 && p.id<120) return 'sushi';
+  if(p.id>=60 && p.id<80) return 'mandarake';
+  const n=(p.n||'')+' '+(p.en||'');
+  if(n.indexOf('Step Sports')>=0 || (p.t||'').indexOf('運動')>=0) return 'sport';
+  if(n.indexOf('Book Off')>=0 || n.indexOf('BOOKOFF')>=0) return 'bookoff';
+  if(n.indexOf('Hobby Off')>=0) return 'hobbyoff';
+  if(n.indexOf('Hard Off')>=0) return 'hardoff';
+  if(n.indexOf('羅針盤')>=0 || n.indexOf('Lashinbang')>=0 || n.indexOf('Animate')>=0) return 'anime';
+  return 'trip';
+}
+POINTS.forEach(p=>{ p.type = ptype(p); });
+
+const GROUP_ORDER=['okayama','himeji','kobe','osaka'];
+const GROUP_LABEL={okayama:'岡山縣',himeji:'姬路',kobe:'神戶',osaka:'大阪',mandarake:'Mandarake（全 16 店）'};
+const TYPE_LABEL={trip:'行程點',anime:'二手／動漫',sport:'運動店',bookoff:'Book Off',hardoff:'Hard Off',hobbyoff:'Hobby Off',mandarake:'Mandarake',sushi:'壽司郎（公仔有貨）'};
+
+function activeTypes(){ return new Set(TYPES.filter(c=>c.checked).map(c=>c.value)); }
+function matches(p,q){
+  if(!q) return true;
+  const hay=[p.n,p.en,p.a,p.d,p.h,p.t,p.dist||""].join(" ").toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
+}
+function visible(p){ return activeTypes().has(p.type) && matches(p,curQ); }
+
+function render(){
+  listEl.innerHTML="";
+  const act=activeTypes();
+  let shown=0;
+  GROUP_ORDER.forEach(gg=>{
+    const arr=POINTS.filter(p=>p.g===gg && act.has(p.type) && matches(p,curQ)).sort((a,b)=>a.id-b.id);
+    if(!arr.length) return;
+    const h=document.createElement('div');h.className='grp';
+    h.textContent=GROUP_LABEL[gg]+`（${arr.length}）`;listEl.appendChild(h);
+    arr.forEach(p=>{
+      shown++;
+      const d=document.createElement('div');d.className='item';d.dataset.id=p.id;
+      d.innerHTML=`<div class="n"><span class="num" style="background:${p.c}">${p.id}</span><span class="t">${p.n}</span></div>
+        <div class="en">${p.en}</div>
+        <div class="d">${p.t}</div><div class="h">🕐 ${p.h}</div>
+        ${p.dist?`<div class="dist">📍 ${p.dist}</div>`:''}<div class="d">${p.a}</div>`;
+      d.onclick=()=>focusPoint(p.id);listEl.appendChild(d);
+    });
+  });
+  // Mandarake shown as its own block at the end (no geographic group)
+  const mand=POINTS.filter(p=>p.type==='mandarake' && act.has('mandarake') && matches(p,curQ)).sort((a,b)=>a.id-b.id);
+  if(mand.length){
+    const h=document.createElement('div');h.className='grp';h.textContent=GROUP_LABEL.mandarake+`（${mand.length}）`;listEl.appendChild(h);
+    mand.forEach(p=>{
+      shown++;
+      const d=document.createElement('div');d.className='item far';d.dataset.id=p.id;
+      d.innerHTML=`<div class="n"><span class="num" style="background:${p.c}">${p.id}</span><span class="t">${p.n}</span></div>
+        <div class="en">${p.en}</div><div class="d">${p.t}</div><div class="h">🕐 ${p.h}</div>
+        ${p.dist?`<div class="dist">📍 ${p.dist}</div>`:''}<div class="d">${p.a}</div>`;
+      d.onclick=()=>focusPoint(p.id);listEl.appendChild(d);
+    });
+  }
+  if(!shown) listEl.innerHTML='<div style="padding:24px 14px;font-size:12px;color:#8a8272">冇符合嘅店舖。試下開多啲類型，或者搜尋：mandarake / book off / hard off / hobby off / lashinbang / step sports / 壽司郎</div>';
+  countEl.textContent = curQ ? `搵到 ${shown} 個結果（關鍵字：${curQ}）` : `顯示 ${shown} 個點`;
+  POINTS.forEach(p=>{
+    const m=markers[p.id]; if(!m) return;
+    const vis=visible(p);
+    m.setOpacity(vis?1:0);
+    if(vis){ if(!map.hasLayer(m)) m.addTo(map); } else { if(map.hasLayer(m)) map.removeLayer(m); }
+  });
+}
+function focusPoint(id){const p=POINTS.find(x=>x.id===id);map.flyTo([p.lat,p.lng],16,{duration:.7});markers[id].openPopup();highlight(id);}
+function highlight(id){
+  document.querySelectorAll('.item').forEach(el=>{
+    el.style.background=(el.dataset.id==id)?'#f6f1e7':'';
+    el.style.borderLeft=(el.dataset.id==id)?'3px solid #c05f3c':'3px solid transparent';
+  });
+  const el=document.querySelector(`.item[data-id="${id}"]`);
+  if(el) el.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function fitVisible(){
+  const pts=POINTS.filter(visible);
+  if(pts.length) map.flyToBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lng])),{padding:[45,45],duration:.6});
+}
+// ---- popup filter wiring ----
+const fbtn=document.getElementById('fbtn'), fpop=document.getElementById('fpop'),
+      fclose=document.getElementById('fclose'), fapply=document.getElementById('fapply'),
+      fcount=document.getElementById('fcount');
+// per-type counts
+const TYPE_COUNT={};
+POINTS.forEach(p=>{ TYPE_COUNT[p.type]=(TYPE_COUNT[p.type]||0)+1; });
+document.querySelectorAll('.cnt').forEach(el=>{ el.textContent = TYPE_COUNT[el.dataset.for]||0; });
+
+let backdrop=null;
+function updateBadge(){
+  const on=TYPES.filter(c=>c.checked).length;
+  fcount.textContent = on+'/'+TYPES.length;
+  cbAll.checked = (on===TYPES.length);
+}
+function openPop(){
+  if(backdrop) return;
+  fpop.hidden=false;
+  fbtn.setAttribute('aria-expanded','true');
+  backdrop=document.createElement('div');
+  backdrop.className='fback';
+  backdrop.onclick=closePop;
+  document.body.appendChild(backdrop);
+}
+function closePop(){
+  fpop.hidden=true;
+  fbtn.setAttribute('aria-expanded','false');
+  if(backdrop){ backdrop.remove(); backdrop=null; }
+}
+fbtn.addEventListener('click',e=>{ e.stopPropagation(); fpop.hidden?openPop():closePop(); });
+fclose.addEventListener('click',closePop);
+fapply.addEventListener('click',closePop);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePop(); });
+
+TYPES.forEach(c=>c.addEventListener('change',()=>{
+  updateBadge(); render(); fitVisible();
+}));
+cbAll.addEventListener('change',()=>{
+  const on=cbAll.checked;
+  TYPES.forEach(c=>c.checked=on);
+  updateBadge(); render(); fitVisible();
+});
+updateBadge();
+
+const qEl=document.getElementById('q');
+let tmr=null;
+qEl.addEventListener('input',()=>{clearTimeout(tmr);tmr=setTimeout(()=>{
+  curQ=qEl.value.trim();render();
+  if(curQ) fitVisible();
+},200);});
+document.getElementById('clear').onclick=()=>{qEl.value='';curQ='';render();};
+
+// ---- Block Chrome overscroll navigation (drag-map triggering back gesture) ----
+(function(){
+  // stop horizontal overscroll at page level
+  document.documentElement.style.overscrollBehavior='none';
+  document.body.style.overscrollBehavior='none';
+  // prevent two-finger horizontal swipe nav on trackpads / touchpads
+  let sx=0, sy=0, tracking=false;
+  window.addEventListener('wheel', function(e){
+    if(Math.abs(e.deltaX) > Math.abs(e.deltaY)*1.2) { e.preventDefault(); }
+  }, {passive:false});
+  // touch: block edge-swipe back
+  window.addEventListener('touchstart', function(e){
+    if(e.touches.length===1){ sx=e.touches[0].clientX; sy=e.touches[0].clientY; tracking=true; }
+  }, {passive:true});
+  window.addEventListener('touchmove', function(e){
+    if(!tracking || e.touches.length!==1) return;
+    const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
+    // edge swipe from left/right 30px = browser back/forward
+    if(Math.abs(dx)>10 && Math.abs(dx)>Math.abs(dy)*1.5){
+      const w=window.innerWidth, x=e.touches[0].clientX;
+      if(x<40 || x>w-40){ e.preventDefault(); }
+    }
+  }, {passive:false});
+  window.addEventListener('touchend', function(){ tracking=false; }, {passive:true});
+  // push a history guard so a stray back doesn't leave the page
+  try{
+    history.pushState({map:1}, '');
+    window.addEventListener('popstate', function(){
+      history.pushState({map:1}, '');
+    });
+  }catch(err){}
+})();
+
+render();
+
+
+// ================= view switching =================
+(function(){
+  const btns=[...document.querySelectorAll('.viewtabs .vt')];
+  function show(v){
+    btns.forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+    document.getElementById('view-map').classList.toggle('on',v==='map');
+    document.getElementById('view-plan').classList.toggle('on',v==='plan');
+    try{ localStorage.setItem('okayama_view',v); }catch(e){}
+    if(v==='map' && window.MAP){ setTimeout(()=>window.MAP.invalidateSize(),60); }
+    window.scrollTo({top:0});
+  }
+  btns.forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));
+  let v='map';
+  try{ v=localStorage.getItem('okayama_view')||'map'; }catch(e){}
+  show(v);
+  window.__showView=show;
+})();
+
+
+(function(){
+  // ================= auth + trip selection =================
+  const TOKEN_KEY='trip_token';
+  const API='/api';
+  let TOKEN=localStorage.getItem(TOKEN_KEY)||'';
+  if(!TOKEN){ location.replace('/login'+location.search); }
+  let ME=null, TRIP=null, ROLE='viewer', CAN_EDIT=false;
+  function authHeaders(extra){ return Object.assign({'Authorization':'Bearer '+TOKEN}, extra||{}); }
+  async function apiGet(path){
+    const r=await fetch(API+path,{cache:'no-store',headers:authHeaders()});
+    if(r.status===401){ location.href='/login'+location.search; throw new Error('auth'); }
+    return r.json();
+  }
+  async function apiPost(path,body){
+    const r=await fetch(API+path,{method:'POST',cache:'no-store',
+      headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)});
+    if(r.status===401){ location.href='/login'+location.search; throw new Error('auth'); }
+    return r.json();
+  }
+  const CYCLE=['','done','partial','skip'];
+  const KIND_ICON={food:'🍜',sight:'🏯',shop:'🛍',move:'🚄',run:'🏃',rest:'😴',
+                   gear:'🎒',warn:'⚠️',star:'⭐',event:'🎪',stay:'🏨',other:'📌'};
+  const DAY_LABEL={};
+  let DAYS=['d1','d2','d3'];
+  function rebuildDays(n){
+    DAYS=[]; for(let i=1;i<=n;i++) DAYS.push('d'+i);
+    DAYS.forEach((d,i)=>{ DAY_LABEL[d]='第'+(i+1)+'日'; });
+  }
+  rebuildDays(3);
+
+  let items=[], marks={}, pois=[], photos=[], rev=0;
+  let curDay='d1';
+  let editingId=null;      // null = new item
+  let pendingPhoto=null;   // {dataUrl, mime}
+
+  const syncEl=document.getElementById('syncState');
+  const whoEl=document.getElementById('syncWho');
+  const daylist=document.getElementById('daylist');
+
+  function setSync(kind,txt){ syncEl.className=kind||''; syncEl.textContent=txt; }
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function poiById(id){ return pois.find(p=>p.id===id)||null; }
+
+  // ---------------- render ----------------
+  function paint(){
+    daylist.innerHTML='';
+    DAYS.forEach(day=>{
+      const sec=document.createElement('section');
+      sec.className='day'+(day===curDay?' on':'');
+      sec.id=day;
+      const arr=items.filter(it=>it.day===day).sort((a,b)=>(a.sort-b.sort)||a.id.localeCompare(b.id));
+      const meta=document.createElement('div'); meta.className='meta';
+      const st=counts(arr);
+      meta.innerHTML='<b>'+DAY_LABEL[day]+'</b> · '+arr.length+' 項'+
+        (st.done?' · ✓'+st.done:'')+(st.partial?' · ◐'+st.partial:'')+(st.skip?' · ✕'+st.skip:'');
+      sec.appendChild(meta);
+      arr.forEach(it=>sec.appendChild(row(it)));
+      daylist.appendChild(sec);
+    });
+    updateProgress();
+  }
+
+  function counts(arr){
+    const c={done:0,partial:0,skip:0};
+    arr.forEach(it=>{ const m=marks[it.id]||''; if(c[m]!==undefined) c[m]++; });
+    return c;
+  }
+
+  function row(it){
+    const el=document.createElement('div');
+    const st=marks[it.id]||'';
+    el.className='item'+(st?' st-'+st:'')+(it.kind==='warn'?' warn':'')+(it.kind==='star'?' star':'');
+    el.dataset.id=it.id;
+
+    const place=poiById(it.place_id);
+    let tagHtml='';
+    if(place) tagHtml+='<span class="tag g">'+esc(place.name)+'</span>';
+    if(it.photo) tagHtml+='<span class="tag">📷</span>';
+
+    el.innerHTML=
+      '<div class="chk"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.5 5.5L20 6.5"/></svg></div>'+
+      '<div class="body">'+
+        '<div class="tm">'+esc(it.time||'')+((it.kind && !/\p{Extended_Pictographic}/u.test(it.title||''))?('　'+(KIND_ICON[it.kind]||'')):'')+'</div>'+
+        '<div class="ttRow"><div class="tt">'+esc(it.title)+'</div>'+
+          '<div class="tools">'+
+            '<button data-act="up" title="上移">↑</button>'+
+            '<button data-act="down" title="下移">↓</button>'+
+            '<button data-act="edit" title="編輯">✎</button>'+
+          '</div></div>'+
+        (it.sub?'<div class="sub">'+esc(it.sub)+'</div>':'')+
+        (tagHtml?'<div style="margin-top:3px">'+tagHtml+'</div>':'')+
+        (it.photo?'<div class="thumb"><img src="/api/photo/'+esc(it.photo)+'" alt="" loading="lazy"></div>':'')+
+      '</div>';
+
+    el.querySelector('.chk').addEventListener('click',e=>{ e.stopPropagation(); cycle(it.id,el); });
+    el.querySelector('.body').addEventListener('click',e=>{
+      if(e.target.closest('.tools')) return;
+      openDetail(it);
+    });
+    el.querySelectorAll('.tools button').forEach(b=>{
+      b.addEventListener('click',e=>{
+        e.stopPropagation();
+        const act=b.dataset.act;
+        if(act==='edit') return openSheet(it);
+        moveItem(it.id,act);
+      });
+    });
+    return el;
+  }
+
+  function updateProgress(){
+    const dayEls=items.filter(it=>it.day===curDay);
+    const c=counts(dayEls);
+    const total=dayEls.length||1;
+    const pct=Math.round((c.done+c.partial*0.5)/total*100);
+    document.getElementById('pbar').style.width=pct+'%';
+    document.getElementById('ptxt').textContent=
+      c.done+' / '+dayEls.length+(c.partial?'　◐'+c.partial:'')+(c.skip?'　✕'+c.skip:'');
+  }
+
+  function showDay(d){
+    curDay=d;
+    document.querySelectorAll('#view-plan .tabs button').forEach(b=>b.classList.toggle('on',b.dataset.day===d));
+    document.querySelectorAll('#daylist .day').forEach(x=>x.classList.toggle('on',x.id===d));
+    updateProgress();
+  }
+
+  // ---------------- server sync ----------------
+  async function bootstrap(){
+    try{
+      const d=await apiGet('/bootstrap?trip='+encodeURIComponent(TRIP));
+      items=d.items||[]; marks=d.marks||{}; pois=d.pois||[]; photos=d.photos||[];
+      rev=d.rev; ROLE=d.role||'viewer'; CAN_EDIT=!!d.can_edit;
+      if(d.trip){
+        document.getElementById('tripTitle').textContent=d.trip.title||'旅程';
+        const sd=d.trip.start_date||'', ed=d.trip.end_date||'';
+        document.getElementById('tripSub').textContent=(sd?(sd+(ed?' – '+ed:'')):'')+
+          '｜'+d.trip.days+' 日｜'+(CAN_EDIT?'可編輯':'唯讀');
+        rebuildDays(d.trip.days||3);
+        rebuildDayTabs();
+        applyRole();
+      }
+      fillPlaceSelect();
+      paint();
+      setSync('ok','已連線 · 協作中');
+      return true;
+    }catch(e){
+      setSync('err','載入失敗：'+String(e).slice(0,40));
+      return false;
+    }
+  }
+
+  function rebuildDayTabs(){
+    const box=document.getElementById('dayTabs');
+    box.innerHTML='';
+    DAYS.forEach((d,i)=>{
+      const b=document.createElement('button');
+      b.dataset.day=d; b.innerHTML=DAY_LABEL[d];
+      if(i===0) b.className='on';
+      b.addEventListener('click',()=>showDay(d));
+      box.appendChild(b);
+    });
+    const sel=document.getElementById('fDay');
+    if(sel){ sel.innerHTML=''; DAYS.forEach(d=>{
+      const o=document.createElement('option'); o.value=d; o.textContent=DAY_LABEL[d]; sel.appendChild(o); }); }
+    if(!DAYS.includes(curDay)) curDay=DAYS[0];
+  }
+
+  function applyRole(){
+    const bar=document.getElementById('roleBar');
+    bar.hidden=false;
+    const label={owner:'擁有者',editor:'可編輯',viewer:'唯讀'}[ROLE]||ROLE;
+    bar.innerHTML='<span class="rchip r-'+ROLE+'">'+label+'</span>';
+    document.body.classList.toggle('readonly',!CAN_EDIT);
+  }
+
+  async function pull(){
+    try{
+      const d=await apiGet('/state?trip='+encodeURIComponent(TRIP));
+      if(d.rev!==rev){
+        rev=d.rev;
+        const b=await apiGet('/bootstrap?trip='+encodeURIComponent(TRIP));
+        const old={...marks};
+        items=b.items||[]; marks=b.marks||{}; pois=b.pois||[]; photos=b.photos||[];
+        rev=b.rev;
+        paint();
+        Object.keys(marks).forEach(k=>{
+          if(old[k]!==marks[k]) flash(k);
+        });
+        Object.keys(old).forEach(k=>{ if(!(k in marks)) flash(k); });
+        whoEl.textContent='已同步更新';
+        setTimeout(()=>{ whoEl.textContent=''; },2400);
+      }
+      setSync('ok','已連線 · 協作中');
+    }catch(e){ setSync('err','連線失敗'); }
+  }
+  function flash(id){
+    const el=daylist.querySelector('.item[data-id="'+id+'"]');
+    if(!el) return;
+    el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),900);
+  }
+
+  async function post(path, body){
+    setSync('wait','儲存中…');
+    try{
+      const d=await apiPost(path.replace(/^\/api/,''), Object.assign({trip:TRIP},body));
+      if(!d.ok) throw new Error(d.error||'fail');
+      if(d.rev) rev=d.rev;
+      setSync('ok','已連線 · 協作中');
+      return d;
+    }catch(e){
+      setSync('err','儲存失敗');
+      throw e;
+    }
+  }
+
+  // ---------------- checkbox cycle ----------------
+  async function cycle(id,el){
+    const cur=marks[id]||'';
+    const next=CYCLE[(CYCLE.indexOf(cur)+1)%CYCLE.length];
+    if(next) marks[id]=next; else delete marks[id];
+    el.classList.remove('st-done','st-partial','st-skip');
+    if(next) el.classList.add('st-'+next);
+    updateProgress();
+    try{ await post(API+'/set',{item:id,status:next}); }
+    catch(e){ /* keep optimistic, poll will reconcile */ }
+  }
+
+  // ---------------- move / delete ----------------
+  async function moveItem(id,dir){
+    try{ await post(API+'/item/move',{id:id,dir:dir}); await bootstrap(); }
+    catch(e){}
+  }
+
+  // ---------------- sheet ----------------
+  const sheet=document.getElementById('sheet'), back=document.getElementById('sheetBack');
+  const fDay=document.getElementById('fDay'), fTime=document.getElementById('fTime'),
+        fTitle=document.getElementById('fTitle'), fSub=document.getElementById('fSub'),
+        fKind=document.getElementById('fKind'), fPlace=document.getElementById('fPlace');
+  const btnDel=document.getElementById('btnDelete'), photoPrev=document.getElementById('photoPreview'),
+        photoImg=document.getElementById('photoImg'), sheetTitle=document.getElementById('sheetTitle');
+
+  function fillPlaceSelect(){
+    const keep=fPlace.value;
+    fPlace.innerHTML='<option value="">（不連地圖）</option>';
+    pois.forEach(p=>{
+      const o=document.createElement('option');
+      o.value=p.id; o.textContent=p.name+(p.addr?('　'+p.addr.slice(0,18)):'');
+      fPlace.appendChild(o);
+    });
+    if(keep) fPlace.value=keep;
+  }
+
+  function openSheet(it, photoData){
+    editingId=it?it.id:null;
+    sheetTitle.textContent=it?'編輯行程':'加新行程';
+    fDay.value=it?it.day:curDay;
+    fTime.value=it?it.time:'';
+    fTitle.value=it?it.title:'';
+    fSub.value=it?it.sub:'';
+    fKind.value=it?it.kind||'other':'other';
+    fPlace.value=it&&it.place_id?it.place_id:'';
+    btnDel.hidden=!it;
+    if(photoData){
+      pendingPhoto=photoData;
+      photoImg.src=photoData.dataUrl; photoPrev.hidden=false;
+    }else{
+      pendingPhoto=null; photoPrev.hidden=true; photoImg.src='';
+    }
+    back.hidden=false; sheet.hidden=false;
+    setTimeout(()=>{ if(!it) fTitle.focus(); },120);
+  }
+  function closeSheet(){
+    back.hidden=true; sheet.hidden=true; pendingPhoto=null; editingId=null;
+  }
+  document.getElementById('sheetX').addEventListener('click',closeSheet);
+  back.addEventListener('click',closeSheet);
+
+  document.getElementById('btnSave').addEventListener('click',async()=>{
+    const title=fTitle.value.trim();
+    if(!title){ fTitle.focus(); fTitle.style.borderColor='#c0392b'; return; }
+    const body={
+      day:fDay.value, time:fTime.value.trim(), title:title,
+      sub:fSub.value.trim(), kind:fKind.value, place_id:fPlace.value||null
+    };
+    try{
+      if(pendingPhoto){
+        body.image=pendingPhoto.dataUrl; body.mime=pendingPhoto.mime;
+        if(editingId) body.item_id=editingId;
+        await post(API+'/photo/commit', body);
+      }else{
+        if(editingId) body.id=editingId;
+        await post(API+'/item', body);
+      }
+      closeSheet();
+      await bootstrap();
+      showDay(body.day);
+    }catch(e){ alert('儲存失敗，請再試'); }
+  });
+
+  btnDel.addEventListener('click',async()=>{
+    if(!editingId) return;
+    if(!confirm('刪除呢一項？')) return;
+    try{ await post(API+'/item/delete',{id:editingId}); closeSheet(); await bootstrap(); }
+    catch(e){}
+  });
+
+  // ================= item detail =================
+  const detail=document.getElementById('detail'), detBack=document.getElementById('detBack'),
+        detBody=document.getElementById('detBody'), detTitle=document.getElementById('detTitle'),
+        detFilePick=document.getElementById('detFilePick');
+  let detItem=null;
+
+  function openDetail(it){
+    detItem=it;
+    detTitle.textContent='項目詳情';
+    const place=poiById(it.place_id);
+    const atts=photos.filter(ph=>ph.item_id===it.id);
+    const st=marks[it.id]||'';
+    const stLabel={done:'✓ 完成',partial:'◐ 部分',skip:'✕ 跳過'}[st]||'未做';
+    const kindName={food:'食',sight:'景點',shop:'購物',move:'交通',run:'跑步',rest:'休息',
+                    gear:'裝備',warn:'重要',star:'重點',event:'活動',stay:'住宿',other:'其他'}[it.kind]||'';
+
+    let html='';
+    const hero = atts[0] || (it.photo?{file:it.photo}:null);
+    if(hero) html+='<div class="detHero"><img src="/api/photo/'+esc(hero.file)+'" alt=""></div>';
+    html+='<div class="detTime">'+esc(it.time||'')+'</div>';
+    html+='<div class="detTitle">'+esc(it.title)+'</div>';
+    html+='<div class="detMeta">';
+    if(kindName) html+='<span>'+esc(kindName)+'</span>';
+    html+='<span class="k">'+stLabel+'</span>';
+    html+='<span>'+esc(DAY_LABEL[it.day]||it.day)+'</span>';
+    if(atts.length) html+='<span>📷 '+atts.length+' 張</span>';
+    html+='</div>';
+    if(it.sub) html+='<div class="detSub">'+esc(it.sub)+'</div>';
+    if(place){
+      html+='<div class="detPlace"><div class="pn">📍 '+esc(place.name)+'</div>'+
+            '<div class="pa">'+esc(place.addr||'')+(place.hours?('｜'+esc(place.hours)):'')+'</div>'+
+            (place.lat?('<a href="https://www.google.com/maps/dir/?api=1&destination='+place.lat+','+place.lng+'" target="_blank">→ Google Maps 導航</a>'):'')+
+            '</div>';
+    }
+    html+='<div class="detSec">相片／收據／參考資料 ('+atts.length+')</div>';
+    if(atts.length){
+      html+='<div class="attList">';
+      atts.forEach(ph=>{
+        html+='<div class="att" data-ph="'+esc(ph.id)+'" data-file="'+esc(ph.file)+'">'+
+              '<img src="/api/photo/'+esc(ph.file)+'" alt="" loading="lazy">'+
+              '<div class="ai"><div class="an">'+esc(ph.caption||'相片')+'</div>'+
+              '<div class="ad">'+new Date((ph.created||0)*1000).toLocaleString('zh-HK',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div></div>'+
+              '<button class="x" data-del="'+esc(ph.id)+'">✕</button></div>';
+      });
+      html+='</div>';
+    }else{
+      html+='<div class="empty">仲未有相片。撳下面「📷 加相／收據」上載收據、餐牌或者現場相。</div>';
+    }
+    detBody.innerHTML=html;
+
+    detBody.querySelectorAll('.att').forEach(a=>{
+      a.addEventListener('click',e=>{
+        if(e.target.closest('[data-del]')) return;
+        window.open('/api/photo/'+a.dataset.file,'_blank');
+      });
+    });
+    detBody.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.addEventListener('click',async e=>{
+        e.stopPropagation();
+        if(!confirm('刪除呢張相？')) return;
+        try{
+          await post(API+'/photo/delete',{photo_id:btn.dataset.del});
+          await bootstrap();
+          const fresh=items.find(x=>x.id===detItem.id);
+          if(fresh) openDetail(fresh);
+        }catch(err){}
+      });
+    });
+
+    detBack.hidden=false; detail.hidden=false;
+  }
+  function closeDetail(){ detail.hidden=true; detBack.hidden=true; detItem=null; }
+  document.getElementById('detX').addEventListener('click',closeDetail);
+  detBack.addEventListener('click',closeDetail);
+  document.getElementById('detEdit').addEventListener('click',()=>{
+    const it=detItem; closeDetail(); if(it) openSheet(it);
+  });
+  document.getElementById('detAttach').addEventListener('click',()=>detFilePick.click());
+  detFilePick.addEventListener('change',async e=>{
+    const files=[...(e.target.files||[])]; detFilePick.value='';
+    if(!files.length||!detItem) return;
+    const targetId=detItem.id;
+    const ov=document.createElement('div');
+    ov.className='analyzing';
+    ov.innerHTML='<div class="sp"></div><p>AI 睇緊相片…</p><small>共 '+files.length+' 張</small>';
+    document.body.appendChild(ov);
+    try{
+      for(const f of files){
+        const dataUrl=await new Promise(res=>{const rd=new FileReader();rd.onload=()=>res(rd.result);rd.readAsDataURL(f);});
+        let sug=null;
+        try{
+          const r=await fetch(API+'/photo/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({trip:TRIP,image:dataUrl,mime:f.type})});
+          const d=await r.json(); if(d.ok) sug=d.suggestion;
+        }catch(err){}
+        await post(API+'/photo/attach',{
+          item_id:targetId, image:dataUrl, mime:f.type,
+          caption:(sug&&sug.title)||f.name||'相片', raw:(sug?JSON.stringify(sug):'')
+        });
+      }
+    }catch(err){}
+    ov.remove();
+    await bootstrap();
+    const fresh=items.find(x=>x.id===targetId);
+    if(fresh) openDetail(fresh);
+  });
+
+  // ================= fab: camera / pick =================
+  const fabWrap=document.getElementById('fabWrap');
+  const filePick=document.getElementById('filePick');
+  const camPick=document.getElementById('camPick');
+  document.getElementById('fab').addEventListener('click',e=>{
+    e.stopPropagation();
+    fabWrap.classList.toggle('open');
+    document.getElementById('fab').classList.toggle('open');
+  });
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('#fabWrap')){ fabWrap.classList.remove('open'); document.getElementById('fab').classList.remove('open'); }
+  });
+  document.getElementById('fabCamera').addEventListener('click',()=>{
+    fabWrap.classList.remove('open'); document.getElementById('fab').classList.remove('open');
+    camPick.click();
+  });
+  document.getElementById('fabPick').addEventListener('click',()=>{
+    fabWrap.classList.remove('open'); document.getElementById('fab').classList.remove('open');
+    filePick.click();
+  });
+
+  async function handlePhotoInput(e){
+    const f=e.target.files&&e.target.files[0];
+    e.target.value='';
+    if(!f) return;
+    if(!/^image\//.test(f.type)){ alert('請揀相片檔'); return; }
+    const dataUrl=await new Promise(res=>{
+      const rd=new FileReader(); rd.onload=()=>res(rd.result); rd.readAsDataURL(f);
+    });
+    const ov=document.createElement('div');
+    ov.className='analyzing';
+    ov.innerHTML='<div class="sp"></div><p>AI 睇緊張相…</p><small>認緊食咩／邊間鋪／邊個位置</small>';
+    document.body.appendChild(ov);
+    let sug=null;
+    try{
+      const r=await fetch(API+'/photo/analyze',{method:'POST',
+        headers:authHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify({trip:TRIP,image:dataUrl,mime:f.type})});
+      const d=await r.json();
+      if(d.ok) sug=d.suggestion;
+    }catch(err){}
+    ov.remove();
+    openSheet(null,{dataUrl:dataUrl,mime:f.type});
+    if(sug){
+      fTitle.value=sug.title||'';
+      fSub.value=sug.sub||'';
+      if(sug.kind) fKind.value=sug.kind;
+      if(sug.time_guess) fTime.value=sug.time_guess;
+      const nm=(sug.shop_name||'').toLowerCase();
+      if(nm){
+        const hit=pois.find(p=>(p.name_en||'').toLowerCase().includes(nm)||
+                                (p.name||'').toLowerCase().includes(nm));
+        if(hit) fPlace.value=hit.id;
+      }
+      fTitle.style.borderColor='#3e5c4b';
+      setTimeout(()=>{ fTitle.style.borderColor=''; },1600);
+    }
+  }
+  filePick.addEventListener('change',handlePhotoInput);
+  camPick.addEventListener('change',handlePhotoInput);
+
+  // ---------------- misc ----------------
+  document.querySelectorAll('#view-plan .tabs button').forEach(b=>{
+    b.addEventListener('click',()=>showDay(b.dataset.day));
+  });
+
+  // prevent edge-swipe back
+  document.documentElement.style.overscrollBehavior='none';
+  document.body.style.overscrollBehavior='none';
+  let sx=0,sy=0,tr=false;
+  window.addEventListener('touchstart',e=>{ if(e.touches.length===1){sx=e.touches[0].clientX;sy=e.touches[0].clientY;tr=true;} },{passive:true});
+  window.addEventListener('touchmove',e=>{
+    if(!tr||e.touches.length!==1) return;
+    const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
+    if(Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)*1.5){
+      const w=window.innerWidth,x=e.touches[0].clientX;
+      if(x<40||x>w-40) e.preventDefault();
+    }
+  },{passive:false});
+  window.addEventListener('touchend',()=>{tr=false;},{passive:true});
+
+  // ---------------- account / trip switcher UI ----------------
+  function el(tag, attrs, html){
+    const n=document.createElement(tag);
+    Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));
+    if(html!=null) n.innerHTML=html;
+    return n;
+  }
+
+  function overlay(title){
+    const back=el('div',{class:'sheetback'}); back.id='ovBack';
+    const box=el('div',{class:'sheet'}); box.id='ovBox';
+    box.appendChild(el('div',{class:'sheetHead'},
+      '<span id="ovTitle">'+title+'</span><button type="button" id="ovX">✕</button>'));
+    box.appendChild(el('div',{class:'sheetBody',id:'ovBody'}));
+    document.body.appendChild(back); document.body.appendChild(box);
+    const close=()=>{ back.remove(); box.remove(); };
+    back.onclick=close; box.querySelector('#ovX').onclick=close;
+    return {box, body:box.querySelector('#ovBody'), close};
+  }
+
+  async function openTripList(){
+    const o=overlay('我嘅旅程');
+    o.body.innerHTML='<p class="muted">載入中…</p>';
+    const d=await apiGet('/trips');
+    o.body.innerHTML='';
+    if(!d.trips||!d.trips.length) o.body.appendChild(el('p',{class:'empty'},'仲未有旅程，撳下面「＋ 新旅程」'));
+    (d.trips||[]).forEach(t=>{
+      const row=el('div',{class:'trow'});
+      row.innerHTML='<div><b>'+t.title+'</b><small>'+(t.start_date||'')+(t.end_date?' – '+t.end_date:'')+
+        ' · '+t.days+' 日 · '+t.items+' 項</small></div><span class="rchip r-'+t.role+'">'+t.role+'</span>';
+      row.onclick=()=>{ location.href='/?trip='+encodeURIComponent(t.id); };
+      o.body.appendChild(row);
+    });
+    const nb=el('button',{class:'primary wide',type:'button'},'＋ 新旅程');
+    nb.onclick=()=>{ o.close(); openNewTrip(); };
+    o.body.appendChild(nb);
+  }
+
+  function openNewTrip(){
+    const o=overlay('新旅程');
+    o.body.innerHTML=`
+      <label class="fl">旅程名</label>
+      <input id="ntTitle" type="text" placeholder="例：2027 東京馬拉松">
+      <div class="row2">
+        <div><label class="fl">開始</label><input id="ntStart" type="date"></div>
+        <div><label class="fl">結束</label><input id="ntEnd" type="date"></div>
+      </div>
+      <label class="fl">日數</label>
+      <input id="ntDays" type="number" min="1" max="30" value="3">
+      <div class="err" id="ntErr"></div>
+      <button class="primary wide" id="ntGo" type="button">建立</button>`;
+    o.body.querySelector('#ntGo').onclick=async()=>{
+      const title=o.body.querySelector('#ntTitle').value.trim();
+      const days=parseInt(o.body.querySelector('#ntDays').value||'3',10);
+      if(!title){ o.body.querySelector('#ntErr').textContent='要填旅程名'; return; }
+      const d=await apiPost('/trips',{title,days,
+        start_date:o.body.querySelector('#ntStart').value||null,
+        end_date:o.body.querySelector('#ntEnd').value||null});
+      if(!d.ok){ o.body.querySelector('#ntErr').textContent=d.error||'建立失敗'; return; }
+      location.href='/?trip='+encodeURIComponent(d.trip_id);
+    };
+  }
+
+  async function openAccount(){
+    const o=overlay('帳戶');
+    o.body.innerHTML='<p class="muted">'+(ME?((ME.name||'')+'<br><small>'+ME.email+'</small>'):'')+'</p>';
+    if(ROLE==='owner' && TRIP){
+      const share=el('button',{class:'wide',type:'button'},'🔗 建立／重設唯讀分享連結');
+      share.onclick=async()=>{
+        const d=await apiPost('/trips/share',{trip_id:TRIP,role:'viewer'});
+        if(d.ok){
+          const url=location.origin+'/?t='+d.share_token;
+          o.body.querySelector('#shareOut').value=url;
+          try{ await navigator.clipboard.writeText(url); }catch(e){}
+        }
+      };
+      o.body.appendChild(share);
+      o.body.appendChild(el('input',{id:'shareOut',readonly:'readonly',placeholder:'分享連結會喺呢度出現'}));
+      const inv=el('div',{class:'invrow'});
+      inv.innerHTML='<input id="invEmail" type="email" placeholder="invite email"><select id="invRole">'+
+        '<option value="editor">可編輯</option><option value="viewer">唯讀</option></select>'+
+        '<button type="button" id="invGo">邀請</button>';
+      o.body.appendChild(el('p',{class:'fl'},'邀請協作者'));
+      o.body.appendChild(inv);
+      inv.querySelector('#invGo').onclick=async()=>{
+        const email=inv.querySelector('#invEmail').value.trim();
+        const role=inv.querySelector('#invRole').value;
+        const d=await apiPost('/trips/invite',{trip_id:TRIP,email,role});
+        if(d.ok){ inv.querySelector('#invEmail').value=''; inv.querySelector('#invGo').textContent='已加入 ✓'; }
+      };
+      const mem=await apiGet('/trips/members?trip='+encodeURIComponent(TRIP));
+      const list=el('div',{class:'memlist'});
+      if(mem.ok){
+        if(mem.owner) list.appendChild(el('div',{class:'mline'},'<b>'+(mem.owner.name||mem.owner.email)+'</b> <span class="rchip r-owner">owner</span>'));
+        (mem.members||[]).forEach(m=>{
+          list.appendChild(el('div',{class:'mline'},'<b>'+(m.name||m.email)+'</b> <span class="rchip r-'+m.role+'">'+m.role+'</span>'));
+        });
+        (mem.invites||[]).forEach(m=>{
+          list.appendChild(el('div',{class:'mline'},'<i>'+m.email+'</i> <span class="rchip">待註冊 · '+m.role+'</span>'));
+        });
+      }
+      o.body.appendChild(el('p',{class:'fl'},'成員'));
+      o.body.appendChild(list);
+    }
+    const out=el('button',{class:'wide ghost',type:'button'},'登出');
+    out.onclick=async()=>{
+      await apiPost('/logout',{});
+      localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('trip_user');
+      location.href='/login';
+    };
+    o.body.appendChild(out);
+  }
+
+  document.getElementById('tripSwitch').onclick=openTripList;
+  document.getElementById('userBtn').onclick=openAccount;
+
+  // ---------------- boot ----------------
+  (async function boot(){
+    setSync('wait','連線中…');
+    if(!TOKEN){ location.href='/login'+location.search; return; }
+    try{ const m=await apiGet('/me'); ME=m.user; }
+    catch(e){ return; }
+
+    const params=new URLSearchParams(location.search);
+    const shareTok=params.get('t');
+    if(shareTok){
+      const j=await apiGet('/join?t='+encodeURIComponent(shareTok));
+      if(j.ok && j.trip_id){ location.href='/?trip='+encodeURIComponent(j.trip_id); return; }
+    }
+    let tid=params.get('trip');
+    if(!tid){
+      const d=await apiGet('/trips');
+      if(d.trips && d.trips.length){
+        const last=localStorage.getItem('trip_last');
+        tid=(last && d.trips.some(t=>t.id===last)) ? last : d.trips[0].id;
+      } else { location.href='/?new=1'; return; }
+      history.replaceState(null,'','/?trip='+encodeURIComponent(tid));
+    }
+    localStorage.setItem('trip_last', tid);
+    TRIP=tid;
+    const ok=await bootstrap();
+    if(ok) showDay(DAYS[0]);
+    setInterval(()=>{ if(!document.hidden && TRIP) pull(); },3000);
+    document.addEventListener('visibilitychange',()=>{ if(!document.hidden && TRIP) pull(); });
+    if(params.get('new')==='1') openNewTrip();
+  })();
+})();
+
+</script>
+</body>
+</html>
